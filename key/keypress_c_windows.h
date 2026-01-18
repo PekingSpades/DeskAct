@@ -80,10 +80,16 @@ static inline void addKeyInput(INPUT *input, int key, DWORD flags) {
 }
 
 /* Send key event to a specific window via PostMessage */
-void keyEventToWindow(int key, DWORD flags, uintptr pid, int8_t isPid) {
-	HWND hwnd = getHwnd(pid, isPid);
+static int postMessageChecked(HWND hwnd, int msg, WPARAM wParam, LPARAM lParam) {
+	if (!PostMessageW(hwnd, msg, wParam, lParam)) {
+		return MM_KEY_ERR_POST;
+	}
+	return MM_KEY_OK;
+}
+
+static int keyEventToHwnd(HWND hwnd, int key, DWORD flags) {
 	int msg = (flags & KEYEVENTF_KEYUP) ? WM_KEYUP : WM_KEYDOWN;
-	PostMessageW(hwnd, msg, key, 0);
+	return postMessageChecked(hwnd, msg, key, 0);
 }
 
 /*
@@ -110,7 +116,7 @@ int keyTap(MMKeyCode code, MMKeyFlags flags) {
 	if (flags & MOD_ALT) { addKeyInput(&inputs[count++], K_ALT, KEYEVENTF_KEYUP); }
 	if (flags & MOD_META) { addKeyInput(&inputs[count++], K_META, KEYEVENTF_KEYUP); }
 
-	return SendInput(count, inputs, sizeof(INPUT)) == count ? 0 : GetLastError();
+	return SendInput(count, inputs, sizeof(INPUT)) == count ? MM_KEY_OK : GetLastError();
 }
 
 /*
@@ -140,7 +146,7 @@ int keyToggle(MMKeyCode code, const bool down, MMKeyFlags flags) {
 		if (flags & MOD_META) { addKeyInput(&inputs[count++], K_META, dwFlags); }
 	}
 
-	return SendInput(count, inputs, sizeof(INPUT)) == count ? 0 : GetLastError();
+	return SendInput(count, inputs, sizeof(INPUT)) == count ? MM_KEY_OK : GetLastError();
 }
 
 /*
@@ -148,18 +154,27 @@ int keyToggle(MMKeyCode code, const bool down, MMKeyFlags flags) {
  */
 int keyTapPid(MMKeyCode code, MMKeyFlags flags, uintptr pid) {
 	/* Windows: use PostMessage (non-atomic) */
-	if (flags & MOD_META) { keyEventToWindow(K_META, 0, pid, 0); }
-	if (flags & MOD_ALT) { keyEventToWindow(K_ALT, 0, pid, 0); }
-	if (flags & MOD_CONTROL) { keyEventToWindow(K_CONTROL, 0, pid, 0); }
-	if (flags & MOD_SHIFT) { keyEventToWindow(K_SHIFT, 0, pid, 0); }
-	keyEventToWindow(code, 0, pid, 0);
+	HWND hwnd = getHwnd(pid, 0);
+	int err = MM_KEY_OK;
 
-	keyEventToWindow(code, KEYEVENTF_KEYUP, pid, 0);
-	if (flags & MOD_SHIFT) { keyEventToWindow(K_SHIFT, KEYEVENTF_KEYUP, pid, 0); }
-	if (flags & MOD_CONTROL) { keyEventToWindow(K_CONTROL, KEYEVENTF_KEYUP, pid, 0); }
-	if (flags & MOD_ALT) { keyEventToWindow(K_ALT, KEYEVENTF_KEYUP, pid, 0); }
-	if (flags & MOD_META) { keyEventToWindow(K_META, KEYEVENTF_KEYUP, pid, 0); }
-	return 0;
+	if (hwnd == NULL) {
+		return MM_KEY_ERR_WINDOW;
+	}
+
+	if (flags & MOD_META) { err = keyEventToHwnd(hwnd, K_META, 0); if (err != MM_KEY_OK) return err; }
+	if (flags & MOD_ALT) { err = keyEventToHwnd(hwnd, K_ALT, 0); if (err != MM_KEY_OK) return err; }
+	if (flags & MOD_CONTROL) { err = keyEventToHwnd(hwnd, K_CONTROL, 0); if (err != MM_KEY_OK) return err; }
+	if (flags & MOD_SHIFT) { err = keyEventToHwnd(hwnd, K_SHIFT, 0); if (err != MM_KEY_OK) return err; }
+	err = keyEventToHwnd(hwnd, code, 0);
+	if (err != MM_KEY_OK) return err;
+
+	err = keyEventToHwnd(hwnd, code, KEYEVENTF_KEYUP);
+	if (err != MM_KEY_OK) return err;
+	if (flags & MOD_SHIFT) { err = keyEventToHwnd(hwnd, K_SHIFT, KEYEVENTF_KEYUP); if (err != MM_KEY_OK) return err; }
+	if (flags & MOD_CONTROL) { err = keyEventToHwnd(hwnd, K_CONTROL, KEYEVENTF_KEYUP); if (err != MM_KEY_OK) return err; }
+	if (flags & MOD_ALT) { err = keyEventToHwnd(hwnd, K_ALT, KEYEVENTF_KEYUP); if (err != MM_KEY_OK) return err; }
+	if (flags & MOD_META) { err = keyEventToHwnd(hwnd, K_META, KEYEVENTF_KEYUP); if (err != MM_KEY_OK) return err; }
+	return MM_KEY_OK;
 }
 
 /*
@@ -167,21 +182,29 @@ int keyTapPid(MMKeyCode code, MMKeyFlags flags, uintptr pid) {
  */
 int keyTogglePid(MMKeyCode code, const bool down, MMKeyFlags flags, uintptr pid) {
 	DWORD dwFlags = down ? 0 : KEYEVENTF_KEYUP;
+	HWND hwnd = getHwnd(pid, 0);
+	int err = MM_KEY_OK;
+
+	if (hwnd == NULL) {
+		return MM_KEY_ERR_WINDOW;
+	}
 
 	if (down) {
-		if (flags & MOD_META) { keyEventToWindow(K_META, dwFlags, pid, 0); }
-		if (flags & MOD_ALT) { keyEventToWindow(K_ALT, dwFlags, pid, 0); }
-		if (flags & MOD_CONTROL) { keyEventToWindow(K_CONTROL, dwFlags, pid, 0); }
-		if (flags & MOD_SHIFT) { keyEventToWindow(K_SHIFT, dwFlags, pid, 0); }
-		keyEventToWindow(code, dwFlags, pid, 0);
+		if (flags & MOD_META) { err = keyEventToHwnd(hwnd, K_META, dwFlags); if (err != MM_KEY_OK) return err; }
+		if (flags & MOD_ALT) { err = keyEventToHwnd(hwnd, K_ALT, dwFlags); if (err != MM_KEY_OK) return err; }
+		if (flags & MOD_CONTROL) { err = keyEventToHwnd(hwnd, K_CONTROL, dwFlags); if (err != MM_KEY_OK) return err; }
+		if (flags & MOD_SHIFT) { err = keyEventToHwnd(hwnd, K_SHIFT, dwFlags); if (err != MM_KEY_OK) return err; }
+		err = keyEventToHwnd(hwnd, code, dwFlags);
+		if (err != MM_KEY_OK) return err;
 	} else {
-		keyEventToWindow(code, dwFlags, pid, 0);
-		if (flags & MOD_SHIFT) { keyEventToWindow(K_SHIFT, dwFlags, pid, 0); }
-		if (flags & MOD_CONTROL) { keyEventToWindow(K_CONTROL, dwFlags, pid, 0); }
-		if (flags & MOD_ALT) { keyEventToWindow(K_ALT, dwFlags, pid, 0); }
-		if (flags & MOD_META) { keyEventToWindow(K_META, dwFlags, pid, 0); }
+		err = keyEventToHwnd(hwnd, code, dwFlags);
+		if (err != MM_KEY_OK) return err;
+		if (flags & MOD_SHIFT) { err = keyEventToHwnd(hwnd, K_SHIFT, dwFlags); if (err != MM_KEY_OK) return err; }
+		if (flags & MOD_CONTROL) { err = keyEventToHwnd(hwnd, K_CONTROL, dwFlags); if (err != MM_KEY_OK) return err; }
+		if (flags & MOD_ALT) { err = keyEventToHwnd(hwnd, K_ALT, dwFlags); if (err != MM_KEY_OK) return err; }
+		if (flags & MOD_META) { err = keyEventToHwnd(hwnd, K_META, dwFlags); if (err != MM_KEY_OK) return err; }
 	}
-	return 0;
+	return MM_KEY_OK;
 }
 
 /*

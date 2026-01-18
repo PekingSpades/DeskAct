@@ -14,22 +14,31 @@
 
 #include <math.h> /* For floor() */
 
-/* Some convenience macros for converting our enums to the system API types. */
-DWORD MMMouseUpToMEventF(MMMouseButton button) {
-	if (button == LEFT_BUTTON) { return MOUSEEVENTF_LEFTUP; }
-	if (button == RIGHT_BUTTON) { return MOUSEEVENTF_RIGHTUP; }
-	return MOUSEEVENTF_MIDDLEUP;
-}
+static int fillMouseInput(bool down, MMMouseButton button, INPUT *input) {
+	DWORD flags = 0;
+	DWORD data = 0;
 
-DWORD MMMouseDownToMEventF(MMMouseButton button) {
-	if (button == LEFT_BUTTON) { return MOUSEEVENTF_LEFTDOWN; }
-	if (button == RIGHT_BUTTON) { return MOUSEEVENTF_RIGHTDOWN; }
-	return MOUSEEVENTF_MIDDLEDOWN;
-}
+	if (button == MM_BUTTON_LEFT) {
+		flags = down ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP;
+	} else if (button == MM_BUTTON_RIGHT) {
+		flags = down ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_RIGHTUP;
+	} else if (button == MM_BUTTON_MIDDLE) {
+		flags = down ? MOUSEEVENTF_MIDDLEDOWN : MOUSEEVENTF_MIDDLEUP;
+	} else if (button == MM_BUTTON_BACK || button == MM_BUTTON_FORWARD) {
+		flags = down ? MOUSEEVENTF_XDOWN : MOUSEEVENTF_XUP;
+		data = (button == MM_BUTTON_BACK) ? XBUTTON1 : XBUTTON2;
+	} else {
+		return ERROR_INVALID_PARAMETER;
+	}
 
-DWORD MMMouseToMEventF(bool down, MMMouseButton button) {
-	if (down) { return MMMouseDownToMEventF(button); }
-	return MMMouseUpToMEventF(button);
+	input->type = INPUT_MOUSE;
+	input->mi.dx = 0;
+	input->mi.dy = 0;
+	input->mi.dwFlags = flags;
+	input->mi.time = 0;
+	input->mi.dwExtraInfo = 0;
+	input->mi.mouseData = data;
+	return 0;
 }
 
 /* Move the mouse to a specific point. */
@@ -51,14 +60,10 @@ MMPointInt32 location() {
 int toggleMouseErr(bool down, MMMouseButton button) {
 	// mouse_event(MMMouseToMEventF(down, button), 0, 0, 0, 0);
 	INPUT mouseInput;
-
-	mouseInput.type = INPUT_MOUSE;
-	mouseInput.mi.dx = 0;
-	mouseInput.mi.dy = 0;
-	mouseInput.mi.dwFlags = MMMouseToMEventF(down, button);
-	mouseInput.mi.time = 0;
-	mouseInput.mi.dwExtraInfo = 0;
-	mouseInput.mi.mouseData = 0;
+	int err = fillMouseInput(down, button, &mouseInput);
+	if (err != 0) {
+		return err;
+	}
 	UINT sent = SendInput(1, &mouseInput, sizeof(mouseInput));
 	return sent == 1 ? 0 : (int)GetLastError();
 }
@@ -88,29 +93,33 @@ int multiClickErr(MMMouseButton button, int clickCount){
 }
 
 /* Function used to scroll the screen in the required direction. */
-void scrollMouseXY(int x, int y) {
+void scrollMouseXY(int x, int y, MMScrollUnit unit) {
 	// Fix for #97, C89 needs variables declared on top of functions (mouseScrollInput)
 	INPUT mouseScrollInputH;
 	INPUT mouseScrollInputV;
+	int scale = unit == MM_SCROLL_UNIT_LINE ? WHEEL_DELTA : 1;
 
-	mouseScrollInputH.type = INPUT_MOUSE;
-	mouseScrollInputH.mi.dx = 0;
-	mouseScrollInputH.mi.dy = 0;
-	mouseScrollInputH.mi.dwFlags = MOUSEEVENTF_WHEEL;
-	mouseScrollInputH.mi.time = 0;
-	mouseScrollInputH.mi.dwExtraInfo = 0;
-	mouseScrollInputH.mi.mouseData = WHEEL_DELTA * x;
+	if (x != 0) {
+		mouseScrollInputH.type = INPUT_MOUSE;
+		mouseScrollInputH.mi.dx = 0;
+		mouseScrollInputH.mi.dy = 0;
+		mouseScrollInputH.mi.dwFlags = MOUSEEVENTF_HWHEEL;
+		mouseScrollInputH.mi.time = 0;
+		mouseScrollInputH.mi.dwExtraInfo = 0;
+		mouseScrollInputH.mi.mouseData = (DWORD)(x * scale);
+		SendInput(1, &mouseScrollInputH, sizeof(mouseScrollInputH));
+	}
 
-	mouseScrollInputV.type = INPUT_MOUSE;
-	mouseScrollInputV.mi.dx = 0;
-	mouseScrollInputV.mi.dy = 0;
-	mouseScrollInputV.mi.dwFlags = MOUSEEVENTF_WHEEL;
-	mouseScrollInputV.mi.time = 0;
-	mouseScrollInputV.mi.dwExtraInfo = 0;
-	mouseScrollInputV.mi.mouseData = WHEEL_DELTA * y;
-
-	SendInput(1, &mouseScrollInputH, sizeof(mouseScrollInputH));
-	SendInput(1, &mouseScrollInputV, sizeof(mouseScrollInputV));
+	if (y != 0) {
+		mouseScrollInputV.type = INPUT_MOUSE;
+		mouseScrollInputV.mi.dx = 0;
+		mouseScrollInputV.mi.dy = 0;
+		mouseScrollInputV.mi.dwFlags = MOUSEEVENTF_WHEEL;
+		mouseScrollInputV.mi.time = 0;
+		mouseScrollInputV.mi.dwExtraInfo = 0;
+		mouseScrollInputV.mi.mouseData = (DWORD)(y * scale);
+		SendInput(1, &mouseScrollInputV, sizeof(mouseScrollInputV));
+	}
 }
 
 /* A crude, fast hypot() approximation to get around the fact that hypot() is not a standard ANSI C function. */

@@ -17,6 +17,8 @@ func main() {
 	fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	fmt.Println("========================================")
 
+	deskact.InitDPIAwareness()
+
 	displayOptions := deskact.DefaultDisplayOptions()
 	mouseSettings := deskact.DefaultMouseSettings()
 
@@ -67,7 +69,10 @@ func main() {
 		}
 
 		for _, pos := range positions {
-			d.Move(pos.x, pos.y, mouseSettings)
+			if err := d.Move(pos.x, pos.y, mouseSettings); err != nil {
+				fmt.Printf("  %-12s: move error: %v\n", pos.name, err)
+				continue
+			}
 			deskact.MilliSleep(800)
 
 			absX, absY := deskact.Location()

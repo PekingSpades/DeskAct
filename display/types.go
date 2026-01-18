@@ -1,4 +1,4 @@
-package deskact
+package display
 
 // Point is point struct.
 type Point struct {

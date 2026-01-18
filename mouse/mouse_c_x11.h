@@ -77,7 +77,8 @@ int multiClickErr(MMMouseButton button, int clickCount){
 }
 
 /* Function used to scroll the screen in the required direction. */
-void scrollMouseXY(int x, int y) {
+void scrollMouseXY(int x, int y, MMScrollUnit unit) {
+	(void)unit;
 	int ydir = 4; /* Button 4 is up, 5 is down. */
 	int xdir = 6;
 	Display *display = XGetMainDisplay();

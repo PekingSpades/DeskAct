@@ -25,6 +25,9 @@
  */
 int keyTap(MMKeyCode code, MMKeyFlags flags) {
 	Display *display = XGetMainDisplay();
+	if (display == NULL) {
+		return MM_KEY_ERR_DISPLAY;
+	}
 
 	/* Press: modifiers -> main key */
 	if (flags & MOD_META) {
@@ -57,7 +60,7 @@ int keyTap(MMKeyCode code, MMKeyFlags flags) {
 	}
 
 	XSync(display, false);
-	return 0;
+	return MM_KEY_OK;
 }
 
 /*
@@ -68,6 +71,9 @@ int keyTap(MMKeyCode code, MMKeyFlags flags) {
  */
 int keyToggle(MMKeyCode code, const bool down, MMKeyFlags flags) {
 	Display *display = XGetMainDisplay();
+	if (display == NULL) {
+		return MM_KEY_ERR_DISPLAY;
+	}
 	const Bool is_press = down ? True : False;
 
 	if (down) {
@@ -103,7 +109,7 @@ int keyToggle(MMKeyCode code, const bool down, MMKeyFlags flags) {
 	}
 
 	XSync(display, false);
-	return 0;
+	return MM_KEY_OK;
 }
 
 /*
@@ -162,6 +168,9 @@ void unicodeType(const unsigned value, uintptr pid, int8_t isPid) {
 
 int input_utf(const char *utf) {
 	Display *dpy = XOpenDisplay(NULL);
+	if (dpy == NULL) {
+		return MM_KEY_ERR_DISPLAY;
+	}
 	KeySym sym = XStringToKeysym(utf);
 
 	int min, max, numcodes;
@@ -179,5 +188,5 @@ int input_utf(const char *utf) {
 
 	XFlush(dpy);
 	XCloseDisplay(dpy);
-	return 0;
+	return MM_KEY_OK;
 }

@@ -1,4 +1,4 @@
-package deskact
+package display
 
 // PlatformInfo is an interface for platform-specific display information.
 type PlatformInfo interface {
@@ -89,10 +89,10 @@ func (d *Display) Info() DisplayInfo {
 // - ToAbsolute(x, y int) (absX, absY int)
 // - ToRelative(absX, absY int) (x, y int, ok bool)
 // - Contains(absX, absY int) bool
-// - Move(x, y int, settings MouseSettings)
-// - MoveSmooth(x, y int, settings MouseSettings) bool
-// - Drag(fromX, fromY, toX, toY int, button string, settings MouseSettings)
-// - DragTo(x, y int, button string, settings MouseSettings)
+// - Move(x, y int, settings MouseSettings) error
+// - MoveSmooth(x, y int, settings MouseSettings) error
+// - Drag(fromX, fromY, toX, toY int, button MouseButton, settings MouseSettings) error
+// - DragTo(x, y int, button MouseButton, settings MouseSettings) error
 // - CaptureRect(x, y, w, h int, options CaptureOptions) (*image.RGBA, error)
 // - MouseLocation() (x, y int, ok bool)
 // - ContainsMouse() bool

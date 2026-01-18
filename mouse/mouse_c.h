@@ -8,6 +8,8 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#include "../base/os.h"
+
 #if defined(IS_MACOSX)
 	#include "mouse_c_macos.h"
 #elif defined(USE_X11)

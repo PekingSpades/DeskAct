@@ -19,24 +19,24 @@
 
 /* Some convenience macros for converting our enums to the system API types. */
 CGEventType MMMouseDownToCGEventType(MMMouseButton button) {
-	if (button == LEFT_BUTTON) {
+	if (button == MM_BUTTON_LEFT) {
 		return kCGEventLeftMouseDown;
 	}
-	if (button == RIGHT_BUTTON) {
+	if (button == MM_BUTTON_RIGHT) {
 		return kCGEventRightMouseDown;
 	}
 	return kCGEventOtherMouseDown;
 }
 
 CGEventType MMMouseUpToCGEventType(MMMouseButton button) {
-	if (button == LEFT_BUTTON) { return kCGEventLeftMouseUp; }
-	if (button == RIGHT_BUTTON) { return kCGEventRightMouseUp; }
+	if (button == MM_BUTTON_LEFT) { return kCGEventLeftMouseUp; }
+	if (button == MM_BUTTON_RIGHT) { return kCGEventRightMouseUp; }
 	return kCGEventOtherMouseUp;
 }
 
 CGEventType MMMouseDragToCGEventType(MMMouseButton button) {
-	if (button == LEFT_BUTTON) { return kCGEventLeftMouseDragged; }
-	if (button == RIGHT_BUTTON) { return kCGEventRightMouseDragged; }
+	if (button == MM_BUTTON_LEFT) { return kCGEventLeftMouseDragged; }
+	if (button == MM_BUTTON_RIGHT) { return kCGEventRightMouseDragged; }
 	return kCGEventOtherMouseDragged;
 }
 
@@ -145,9 +145,10 @@ int multiClickErr(MMMouseButton button, int clickCount){
 }
 
 /* Function used to scroll the screen in the required direction. */
-void scrollMouseXY(int x, int y) {
+void scrollMouseXY(int x, int y, MMScrollUnit unit) {
 	CGEventSourceRef source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
-	CGEventRef event = CGEventCreateScrollWheelEvent(source, kCGScrollEventUnitPixel, 2, y, x);
+	CGScrollEventUnit cgUnit = unit == MM_SCROLL_UNIT_LINE ? kCGScrollEventUnitLine : kCGScrollEventUnitPixel;
+	CGEventRef event = CGEventCreateScrollWheelEvent(source, cgUnit, 2, y, x);
 	CGEventPost(kCGHIDEventTap, event);
 
 	CFRelease(event);

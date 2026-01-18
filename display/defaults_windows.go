@@ -1,8 +1,8 @@
-//go:build !windows
+//go:build windows
 
-package deskact
+package display
 
 // DefaultDisplayOptions returns the default display options.
 func DefaultDisplayOptions() DisplayOptions {
-	return DisplayOptions{DPIAware: DefaultDPIAware}
+	return DisplayOptions{DPIAware: IsDPIAware()}
 }

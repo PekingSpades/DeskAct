@@ -2114,9 +2114,9 @@ func runMouseTest(runID string, plan RunPlan, client ClientInfo, display *deskac
 		}
 		var err error
 		if target.Clicks <= 1 {
-			err = deskact.Click("left", false, settings)
+			err = deskact.Click(deskact.MouseButtonLeft, false, settings)
 		} else {
-			err = deskact.MultiClick("left", target.Clicks, settings)
+			err = deskact.MultiClick(deskact.MouseButtonLeft, target.Clicks, settings)
 		}
 		if err != nil {
 			return err
@@ -2133,13 +2133,17 @@ func runMouseTest(runID string, plan RunPlan, client ClientInfo, display *deskac
 	if err := verifyMouseMove(display, dragStart, settings, tolerance); err != nil {
 		return fmt.Errorf("drag start: %w", err)
 	}
-	_ = deskact.Toggle("left", true, false, settings)
-	ok := display.MoveSmooth(dragEnd.X, dragEnd.Y, settings)
+	if err := deskact.Toggle(deskact.MouseButtonLeft, true, false, settings); err != nil {
+		return err
+	}
+	err := display.MoveSmooth(dragEnd.X, dragEnd.Y, settings)
 	time.Sleep(150 * time.Millisecond)
-	_ = deskact.Toggle("left", false, false, settings)
+	if toggleErr := deskact.Toggle(deskact.MouseButtonLeft, false, false, settings); toggleErr != nil && err == nil {
+		err = toggleErr
+	}
 	time.Sleep(120 * time.Millisecond)
-	if !ok {
-		return errors.New("drag move failed")
+	if err != nil {
+		return fmt.Errorf("drag move failed: %w", err)
 	}
 	if err := verifyMouseAt(display, dragEnd, tolerance); err != nil {
 		return fmt.Errorf("drag end: %w", err)
@@ -2225,7 +2229,9 @@ func absInt(v int) int {
 }
 
 func verifyMouseMove(display *deskact.Display, target deskact.Point, settings deskact.MouseSettings, tolerance int) error {
-	display.Move(target.X, target.Y, settings)
+	if err := display.Move(target.X, target.Y, settings); err != nil {
+		return err
+	}
 	time.Sleep(140 * time.Millisecond)
 	return verifyMouseAt(display, target, tolerance)
 }
@@ -2443,13 +2449,15 @@ func focusKeyboardInput(client ClientInfo, display *deskact.Display, settings de
 		return errors.New("keyboard input bounds missing")
 	}
 	pt := rectCenterPoint(rect, client.DevicePixelRatio, client.ViewportOffsetX, client.ViewportOffsetY, display)
-	display.Move(pt.X, pt.Y, settings)
-	time.Sleep(120 * time.Millisecond)
-	if err := deskact.Click("left", false, settings); err != nil {
+	if err := display.Move(pt.X, pt.Y, settings); err != nil {
 		return err
 	}
 	time.Sleep(120 * time.Millisecond)
-	return deskact.Click("left", false, settings)
+	if err := deskact.Click(deskact.MouseButtonLeft, false, settings); err != nil {
+		return err
+	}
+	time.Sleep(120 * time.Millisecond)
+	return deskact.Click(deskact.MouseButtonLeft, false, settings)
 }
 
 func primeMouseArea(client ClientInfo, display *deskact.Display, settings deskact.MouseSettings) error {
@@ -2458,9 +2466,11 @@ func primeMouseArea(client ClientInfo, display *deskact.Display, settings deskac
 		return errors.New("mouse area bounds missing")
 	}
 	pt := targetPointFromNorm(0.5, 0.5, client, display)
-	display.Move(pt.X, pt.Y, settings)
+	if err := display.Move(pt.X, pt.Y, settings); err != nil {
+		return err
+	}
 	time.Sleep(120 * time.Millisecond)
-	return deskact.Click("left", false, settings)
+	return deskact.Click(deskact.MouseButtonLeft, false, settings)
 }
 
 func evaluateKeyboardReport(plan KeyboardPlan, report KeyboardReport) KeyboardReport {

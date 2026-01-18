@@ -1,20 +1,21 @@
 //go:build linux
 // +build linux
 
-package deskact
+package display
 
 /*
 #cgo linux CFLAGS: -I/usr/src
 #cgo linux LDFLAGS: -L/usr/src -lm -lX11 -lXtst -lXinerama
 
-#include "screen/display_c.h"
+#include "display_c.h"
 */
 import "C"
 
 import (
 	"image"
 
-	"github.com/PekingSpades/DeskAct/internal/screenshot"
+	"github.com/PekingSpades/DeskAct/mouse"
+	"github.com/PekingSpades/DeskAct/screenshot"
 )
 
 // MainDisplay returns the main display.
@@ -109,32 +110,44 @@ func (d *Display) Contains(absX, absY int) bool {
 }
 
 // Move moves the mouse to the specified coordinates relative to this display.
-func (d *Display) Move(x, y int, settings MouseSettings) {
+func (d *Display) Move(x, y int, settings MouseSettings) error {
 	absX, absY := d.ToAbsolute(x, y)
-	Move(absX, absY, settings)
+	return mouse.Move(absX, absY, settings)
 }
 
 // MoveSmooth smoothly moves the mouse to the specified coordinates relative to this display.
-func (d *Display) MoveSmooth(x, y int, settings MouseSettings) bool {
+func (d *Display) MoveSmooth(x, y int, settings MouseSettings) error {
 	absX, absY := d.ToAbsolute(x, y)
-	return MoveSmooth(absX, absY, settings)
+	return mouse.MoveSmooth(absX, absY, settings)
 }
 
 // Drag drags the mouse from one position to another on this display.
-func (d *Display) Drag(fromX, fromY, toX, toY int, button string, settings MouseSettings) {
-	d.Move(fromX, fromY, settings)
-	_ = Toggle(button, true, false, settings)
-	MilliSleep(50)
-	d.MoveSmooth(toX, toY, settings)
-	_ = Toggle(button, false, false, settings)
+func (d *Display) Drag(fromX, fromY, toX, toY int, button MouseButton, settings MouseSettings) error {
+	if err := d.Move(fromX, fromY, settings); err != nil {
+		return err
+	}
+	if err := mouse.Toggle(button, true, false, settings); err != nil {
+		return err
+	}
+	mouse.MilliSleep(50)
+	if err := d.MoveSmooth(toX, toY, settings); err != nil {
+		_ = mouse.Toggle(button, false, false, settings)
+		return err
+	}
+	return mouse.Toggle(button, false, false, settings)
 }
 
 // DragTo drags the mouse from the current position to the specified position on this display.
-func (d *Display) DragTo(x, y int, button string, settings MouseSettings) {
-	_ = Toggle(button, true, false, settings)
-	MilliSleep(50)
-	d.MoveSmooth(x, y, settings)
-	_ = Toggle(button, false, false, settings)
+func (d *Display) DragTo(x, y int, button MouseButton, settings MouseSettings) error {
+	if err := mouse.Toggle(button, true, false, settings); err != nil {
+		return err
+	}
+	mouse.MilliSleep(50)
+	if err := d.MoveSmooth(x, y, settings); err != nil {
+		_ = mouse.Toggle(button, false, false, settings)
+		return err
+	}
+	return mouse.Toggle(button, false, false, settings)
 }
 
 // CaptureRect captures a rectangular region of this display.
@@ -145,12 +158,12 @@ func (d *Display) CaptureRect(x, y, w, h int, options CaptureOptions) (*image.RG
 
 // MouseLocation gets the mouse location relative to this display.
 func (d *Display) MouseLocation() (x, y int, ok bool) {
-	absX, absY := Location()
+	absX, absY := mouse.Location()
 	return d.ToRelative(absX, absY)
 }
 
 // ContainsMouse checks if the mouse is on this display.
 func (d *Display) ContainsMouse() bool {
-	absX, absY := Location()
+	absX, absY := mouse.Location()
 	return d.Contains(absX, absY)
 }

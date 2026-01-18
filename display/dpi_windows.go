@@ -1,7 +1,7 @@
 //go:build windows
 // +build windows
 
-package deskact
+package display
 
 import (
 	"syscall"

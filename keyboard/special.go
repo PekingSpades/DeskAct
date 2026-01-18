@@ -1,4 +1,4 @@
-package deskact
+package keyboard
 
 // DefaultSpecialKeys returns the default special-key mapping.
 func DefaultSpecialKeys() map[string]string {

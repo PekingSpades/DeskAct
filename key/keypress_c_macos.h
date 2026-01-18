@@ -67,7 +67,7 @@ static int postMediaKeyEvent(MMKeyCode code, bool down) {
 
 	kr = IOHIDPostEvent(_getAuxiliaryKeyDriver(),
 		NX_SYSDEFINED, loc, &event, kNXEventDataVersion, 0, FALSE);
-	return (kr == KERN_SUCCESS) ? 0 : -1;
+	return (kr == KERN_SUCCESS) ? MM_KEY_OK : MM_KEY_ERR_EVENT;
 }
 
 /*
@@ -80,20 +80,23 @@ int keyTap(MMKeyCode code, MMKeyFlags flags) {
 	/* The media keys all have 1000 added to them to help us detect them. */
 	if (code >= 1000) {
 		code = code - 1000; /* Get the real keycode. */
-		postMediaKeyEvent(code, true);
+		int err = postMediaKeyEvent(code, true);
+		if (err != MM_KEY_OK) { return err; }
 		microsleep(5.0);
-		postMediaKeyEvent(code, false);
-		return 0;
+		return postMediaKeyEvent(code, false);
 	}
 
 	/* macOS: CGEventFlags makes it atomic - modifiers are set on the event itself */
 	CGEventSourceRef source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
+	if (source == NULL) {
+		return MM_KEY_ERR_EVENT;
+	}
 
 	/* Press */
 	CGEventRef keyDown = CGEventCreateKeyboardEvent(source, (CGKeyCode)code, true);
 	if (keyDown == NULL) {
 		CFRelease(source);
-		return -1;
+		return MM_KEY_ERR_EVENT;
 	}
 	if (flags != 0) {
 		CGEventSetFlags(keyDown, (CGEventFlags)flags);
@@ -105,7 +108,7 @@ int keyTap(MMKeyCode code, MMKeyFlags flags) {
 	CGEventRef keyUp = CGEventCreateKeyboardEvent(source, (CGKeyCode)code, false);
 	if (keyUp == NULL) {
 		CFRelease(source);
-		return -1;
+		return MM_KEY_ERR_EVENT;
 	}
 	if (flags != 0) {
 		CGEventSetFlags(keyUp, (CGEventFlags)flags);
@@ -114,7 +117,7 @@ int keyTap(MMKeyCode code, MMKeyFlags flags) {
 	CFRelease(keyUp);
 
 	CFRelease(source);
-	return 0;
+	return MM_KEY_OK;
 }
 
 /*
@@ -132,11 +135,14 @@ int keyToggle(MMKeyCode code, const bool down, MMKeyFlags flags) {
 
 	/* macOS: CGEventFlags makes it atomic */
 	CGEventSourceRef source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
+	if (source == NULL) {
+		return MM_KEY_ERR_EVENT;
+	}
 	CGEventRef keyEvent = CGEventCreateKeyboardEvent(source, (CGKeyCode)code, down);
 
 	if (keyEvent == NULL) {
 		CFRelease(source);
-		return -1;
+		return MM_KEY_ERR_EVENT;
 	}
 
 	CGEventSetType(keyEvent, down ? kCGEventKeyDown : kCGEventKeyUp);
@@ -147,7 +153,7 @@ int keyToggle(MMKeyCode code, const bool down, MMKeyFlags flags) {
 	CGEventPost(kCGHIDEventTap, keyEvent);
 	CFRelease(keyEvent);
 	CFRelease(source);
-	return 0;
+	return MM_KEY_OK;
 }
 
 /*
@@ -156,11 +162,14 @@ int keyToggle(MMKeyCode code, const bool down, MMKeyFlags flags) {
 int keyTapPid(MMKeyCode code, MMKeyFlags flags, uintptr pid) {
 	/* macOS: supports PID natively */
 	CGEventSourceRef source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
+	if (source == NULL) {
+		return MM_KEY_ERR_EVENT;
+	}
 
 	CGEventRef keyDown = CGEventCreateKeyboardEvent(source, (CGKeyCode)code, true);
 	if (keyDown == NULL) {
 		CFRelease(source);
-		return -1;
+		return MM_KEY_ERR_EVENT;
 	}
 	if (flags != 0) {
 		CGEventSetFlags(keyDown, (CGEventFlags)flags);
@@ -171,7 +180,7 @@ int keyTapPid(MMKeyCode code, MMKeyFlags flags, uintptr pid) {
 	CGEventRef keyUp = CGEventCreateKeyboardEvent(source, (CGKeyCode)code, false);
 	if (keyUp == NULL) {
 		CFRelease(source);
-		return -1;
+		return MM_KEY_ERR_EVENT;
 	}
 	if (flags != 0) {
 		CGEventSetFlags(keyUp, (CGEventFlags)flags);
@@ -180,7 +189,7 @@ int keyTapPid(MMKeyCode code, MMKeyFlags flags, uintptr pid) {
 	CFRelease(keyUp);
 
 	CFRelease(source);
-	return 0;
+	return MM_KEY_OK;
 }
 
 /*
@@ -188,11 +197,14 @@ int keyTapPid(MMKeyCode code, MMKeyFlags flags, uintptr pid) {
  */
 int keyTogglePid(MMKeyCode code, const bool down, MMKeyFlags flags, uintptr pid) {
 	CGEventSourceRef source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
+	if (source == NULL) {
+		return MM_KEY_ERR_EVENT;
+	}
 	CGEventRef keyEvent = CGEventCreateKeyboardEvent(source, (CGKeyCode)code, down);
 
 	if (keyEvent == NULL) {
 		CFRelease(source);
-		return -1;
+		return MM_KEY_ERR_EVENT;
 	}
 
 	CGEventSetType(keyEvent, down ? kCGEventKeyDown : kCGEventKeyUp);
@@ -203,7 +215,7 @@ int keyTogglePid(MMKeyCode code, const bool down, MMKeyFlags flags, uintptr pid)
 	CGEventPostToPid(pid, keyEvent);
 	CFRelease(keyEvent);
 	CFRelease(source);
-	return 0;
+	return MM_KEY_OK;
 }
 
 /*

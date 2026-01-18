@@ -38,6 +38,14 @@
 	typedef unsigned int MMKeyFlags;
 #endif
 
+enum _MMKeyError {
+	MM_KEY_OK = 0,
+	MM_KEY_ERR_EVENT = -1,
+	MM_KEY_ERR_DISPLAY = -2,
+	MM_KEY_ERR_WINDOW = -3,
+	MM_KEY_ERR_POST = -4
+};
+
 #if defined(IS_WINDOWS)
 	/* Send win32 key event for given key. */
 	void win32KeyEvent(int key, MMKeyFlags flags, uintptr pid, int8_t isPid);
