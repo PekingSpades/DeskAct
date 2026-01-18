@@ -1,0 +1,73 @@
+name: Build Tester
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - goos: darwin
+            goarch: amd64
+            runner: macos-15-intel
+          - goos: darwin
+            goarch: arm64
+            runner: macos-15
+          - goos: windows
+            goarch: amd64
+            runner: windows-latest
+          - goos: linux
+            goarch: amd64
+            runner: ubuntu-latest
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+
+      - name: Install Linux dependencies
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libx11-dev \
+            libxtst-dev \
+            libxinerama-dev \
+            libpng-dev \
+            xclip \
+            xsel
+
+      - name: Build deskact-tester
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 1
+          CGO_LDFLAGS_ALLOW: "-weak_framework|ScreenCaptureKit"
+          CGO_CFLAGS: ${{ matrix.goos == 'darwin' && '-mmacosx-version-min=11.0' || '' }}
+          CGO_LDFLAGS: ${{ matrix.goos == 'darwin' && '-mmacosx-version-min=11.0' || '' }}
+        run: |
+          suffix=""
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            suffix=".exe"
+          fi
+          go build -v -o "deskact-tester-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./cmd/deskact-tester
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deskact-tester-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            deskact-tester-${{ matrix.goos }}-${{ matrix.goarch }}*
+          retention-days: 30
