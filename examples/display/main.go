@@ -17,7 +17,9 @@ func main() {
 	fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	fmt.Println("========================================")
 
-	deskact.InitDPIAwareness()
+	dpiSelected, dpiResult := promptDPIInit()
+	fmt.Printf("DPI init selected: %v\n", dpiSelected)
+	fmt.Printf("DPI init result: %s\n", dpiResult)
 
 	displayOptions := deskact.DefaultDisplayOptions()
 	mouseSettings := deskact.DefaultMouseSettings()
@@ -96,6 +98,8 @@ func main() {
 	logBuilder.WriteString("DeskAct Display Example\n")
 	logBuilder.WriteString(fmt.Sprintf("Go version: %s\n", runtime.Version()))
 	logBuilder.WriteString(fmt.Sprintf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH))
+	logBuilder.WriteString(fmt.Sprintf("DPI init selected: %v\n", dpiSelected))
+	logBuilder.WriteString(fmt.Sprintf("DPI init result: %s\n", dpiResult))
 	logBuilder.WriteString(fmt.Sprintf("Total displays: %d\n", count))
 	for _, d := range displays {
 		info := d.Info()
@@ -119,5 +123,23 @@ func main() {
 			break
 		}
 		fmt.Println("Press 's' to save log and exit, or 'e' to exit directly:")
+	}
+}
+
+func promptDPIInit() (bool, string) {
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Print("\nInitialize DPI awareness? (y/n): ")
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(strings.ToLower(input))
+		switch input {
+		case "y", "yes":
+			result := deskact.InitDPIAwareness()
+			return true, fmt.Sprintf("%v", result)
+		case "n", "no":
+			return false, "skipped"
+		default:
+			fmt.Println("Please enter 'y' or 'n'.")
+		}
 	}
 }
