@@ -26,10 +26,6 @@ void moveMouse(MMPointInt32 point){
 	XSync(display, false);
 }
 
-void dragMouse(MMPointInt32 point, const MMMouseButton button){
-	moveMouse(point);
-}
-
 MMPointInt32 location() {
 	int x, y; 	/* This is all we care about. Seriously. */
 	Window garb1, garb2; 	/* Why you can't specify NULL as a parameter */

@@ -46,10 +46,6 @@ void moveMouse(MMPointInt32 point){
 	SetPhysicalCursorPos(point.x, point.y);
 }
 
-void dragMouse(MMPointInt32 point, const MMMouseButton button){
-	moveMouse(point);
-}
-
 MMPointInt32 location() {
 	POINT point;
 	GetPhysicalCursorPos(&point);

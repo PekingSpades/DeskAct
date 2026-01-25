@@ -21,7 +21,7 @@ func Drag(x, y int, button MouseButton, settings MouseSettings) error {
 		return err
 	}
 	MilliSleep(50)
-	if err := Move(x, y, settings); err != nil {
+	if err := dragTo(x, y, button, settings); err != nil {
 		_ = Toggle(button, false, false, settings)
 		return err
 	}
@@ -34,7 +34,7 @@ func DragSmooth(x, y int, button MouseButton, settings MouseSettings) error {
 		return err
 	}
 	MilliSleep(50)
-	if err := MoveSmooth(x, y, settings); err != nil {
+	if err := dragSmoothTo(x, y, button, settings); err != nil {
 		_ = Toggle(button, false, false, settings)
 		return err
 	}

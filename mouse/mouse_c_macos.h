@@ -226,3 +226,31 @@ bool smoothlyMoveMouse(MMPointInt32 endPoint, double lowSpeed, double highSpeed)
 
 	return true;
 }
+
+bool smoothlyDragMouse(MMPointInt32 endPoint, const MMMouseButton button, double lowSpeed, double highSpeed){
+	MMPointInt32 pos = location();
+	double velo_x = 0.0, velo_y = 0.0;
+	double distance;
+
+	while ((distance =crude_hypot((double)pos.x - endPoint.x, (double)pos.y - endPoint.y)) > 1.0) {
+		double gravity = DEADBEEF_UNIFORM(5.0, 500.0);
+		double veloDistance;
+		velo_x += (gravity * ((double)endPoint.x - pos.x)) / distance;
+		velo_y += (gravity * ((double)endPoint.y - pos.y)) / distance;
+
+		/* Normalize velocity to get a unit vector of length 1. */
+		veloDistance = crude_hypot(velo_x, velo_y);
+		velo_x /= veloDistance;
+		velo_y /= veloDistance;
+
+		pos.x += floor(velo_x + 0.5);
+		pos.y += floor(velo_y + 0.5);
+
+		dragMouse(pos, button);
+
+		/* Wait 1 - 3 milliseconds. */
+		microsleep(DEADBEEF_UNIFORM(lowSpeed, highSpeed));
+	}
+
+	return true;
+}
