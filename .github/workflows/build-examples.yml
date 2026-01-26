@@ -69,7 +69,9 @@ jobs:
           go build -v -o "apps-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/apps
 
       - name: Upload artifacts
+        id: upload_github_artifacts
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: examples-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
@@ -78,4 +80,54 @@ jobs:
             mouse-${{ matrix.goos }}-${{ matrix.goarch }}*
             window-${{ matrix.goos }}-${{ matrix.goarch }}*
             apps-${{ matrix.goos }}-${{ matrix.goarch }}*
-          retention-days: 30
+          retention-days: 7
+
+      - name: Upload artifacts to server
+        shell: bash
+        continue-on-error: true
+        env:
+          ARTIFACT_SERVER_URL: ${{ secrets.ARTIFACT_SERVER_URL }}
+          ARTIFACT_USER: ${{ secrets.ARTIFACT_SERVER_USER }}
+          ARTIFACT_PASSWORD: ${{ secrets.ARTIFACT_SERVER_PASSWORD }}
+        run: |
+          set -euo pipefail
+          repo_name="${GITHUB_REPOSITORY##*/}"
+          date_str="$(date -u +%Y-%m-%d)"
+          commit_hash="${GITHUB_SHA}"
+          base_path="/${repo_name}/${date_str}/${commit_hash}/"
+          server_url="${ARTIFACT_SERVER_URL%/}"
+          shopt -s nullglob
+          files=(
+            capture-${{ matrix.goos }}-${{ matrix.goarch }}*
+            display-${{ matrix.goos }}-${{ matrix.goarch }}*
+            mouse-${{ matrix.goos }}-${{ matrix.goarch }}*
+            window-${{ matrix.goos }}-${{ matrix.goarch }}*
+            apps-${{ matrix.goos }}-${{ matrix.goarch }}*
+          )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No artifacts found to upload"
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              relative_path="${repo_name}/${date_str}/${commit_hash}/${filename}"
+              echo "Uploading ${filename}..."
+              for attempt in 1 2 3; do
+                if curl --http1.1 -f --max-time 300 --silent --output /dev/null \
+                  -u "${ARTIFACT_USER}:${ARTIFACT_PASSWORD}" \
+                  -F "path=@${file}" \
+                  "${server_url}/upload?path=${base_path}"; then
+                  echo "${relative_path}"
+                  break
+                else
+                  echo "Attempt ${attempt} failed for ${filename}"
+                  if [ "$attempt" -eq 3 ]; then
+                    echo "Failed to upload ${filename} after 3 attempts"
+                    exit 1
+                  fi
+                  sleep 5
+                fi
+              done
+            fi
+          done
