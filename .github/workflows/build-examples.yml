@@ -65,6 +65,8 @@ jobs:
           go build -v -o "capture-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/capture
           go build -v -o "display-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/display
           go build -v -o "mouse-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/mouse
+          go build -v -o "window-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/window
+          go build -v -o "apps-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/apps
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -74,4 +76,6 @@ jobs:
             capture-${{ matrix.goos }}-${{ matrix.goarch }}*
             display-${{ matrix.goos }}-${{ matrix.goarch }}*
             mouse-${{ matrix.goos }}-${{ matrix.goarch }}*
+            window-${{ matrix.goos }}-${{ matrix.goarch }}*
+            apps-${{ matrix.goos }}-${{ matrix.goarch }}*
           retention-days: 30

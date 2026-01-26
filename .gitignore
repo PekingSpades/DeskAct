@@ -35,3 +35,9 @@ go.work.sum
 
 .refer
 .refer/*
+
+.apps
+.apps/*
+
+display_*.png
+window_*.png
