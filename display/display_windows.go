@@ -37,10 +37,13 @@ func MainDisplay(options DisplayOptions) *Display {
 	physW, physH := int(info.w), int(info.h)
 
 	// Calculate logical size.
-	logicalW, logicalH := physW, physH
-	if scale > 0 {
-		logicalW = int(float64(physW) / scale)
-		logicalH = int(float64(physH) / scale)
+	logicalW, logicalH := int(info.vw), int(info.vh)
+	if logicalW <= 0 || logicalH <= 0 {
+		logicalW, logicalH = physW, physH
+		if scale > 0 {
+			logicalW = int(float64(physW) / scale)
+			logicalH = int(float64(physH) / scale)
+		}
 	}
 
 	// Always store physical origin for capture operations.
@@ -92,10 +95,13 @@ func AllDisplays(options DisplayOptions) []*Display {
 		scale := float64(info.scale)
 		physW, physH := int(info.w), int(info.h)
 
-		logicalW, logicalH := physW, physH
-		if scale > 0 {
-			logicalW = int(float64(physW) / scale)
-			logicalH = int(float64(physH) / scale)
+		logicalW, logicalH := int(info.vw), int(info.vh)
+		if logicalW <= 0 || logicalH <= 0 {
+			logicalW, logicalH = physW, physH
+			if scale > 0 {
+				logicalW = int(float64(physW) / scale)
+				logicalH = int(float64(physH) / scale)
+			}
 		}
 
 		// Always store physical origin for capture operations.
@@ -147,10 +153,13 @@ func DisplayAt(index int, options DisplayOptions) *Display {
 	scale := float64(info.scale)
 	physW, physH := int(info.w), int(info.h)
 
-	logicalW, logicalH := physW, physH
-	if scale > 0 {
-		logicalW = int(float64(physW) / scale)
-		logicalH = int(float64(physH) / scale)
+	logicalW, logicalH := int(info.vw), int(info.vh)
+	if logicalW <= 0 || logicalH <= 0 {
+		logicalW, logicalH = physW, physH
+		if scale > 0 {
+			logicalW = int(float64(physW) / scale)
+			logicalH = int(float64(physH) / scale)
+		}
 	}
 
 	// Always store physical origin for capture operations.

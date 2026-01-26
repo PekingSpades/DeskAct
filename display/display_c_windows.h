@@ -52,6 +52,7 @@ typedef struct {
     int8_t  isMain;     // Is main display
     int32_t x, y, w, h; // Physical coordinates and size
     int32_t vx, vy;     // Virtual (logical) coordinates origin
+    int32_t vw, vh;     // Virtual (logical) size
     double  scale;      // Scale factor (physical/logical)
 } DisplayInfoC;
 
@@ -124,6 +125,10 @@ static BOOL CALLBACK MonitorInfoEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRE
     // Always store virtual (logical) coordinates
     info->vx = lprcMonitor->left;
     info->vy = lprcMonitor->top;
+    int32_t logicalW = lprcMonitor->right - lprcMonitor->left;
+    int32_t logicalH = lprcMonitor->bottom - lprcMonitor->top;
+    info->vw = logicalW;
+    info->vh = logicalH;
 
     if (hasPhysical) {
         // Use physical coordinates
@@ -133,7 +138,6 @@ static BOOL CALLBACK MonitorInfoEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRE
         info->h = physRect.bottom - physRect.top;
 
         // Calculate scale based on DPI awareness mode
-        int32_t logicalW = lprcMonitor->right - lprcMonitor->left;
         if (logicalW > 0 && info->w != logicalW) {
             // Physical and logical sizes differ (DPI unaware mode)
             // Windows virtualizes coordinates, use ratio to calculate scale
@@ -147,8 +151,8 @@ static BOOL CALLBACK MonitorInfoEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRE
         // Fallback: use logical coordinates
         info->x = lprcMonitor->left;
         info->y = lprcMonitor->top;
-        info->w = lprcMonitor->right - lprcMonitor->left;
-        info->h = lprcMonitor->bottom - lprcMonitor->top;
+        info->w = logicalW;
+        info->h = logicalH;
         info->scale = 1.0;
     }
 
