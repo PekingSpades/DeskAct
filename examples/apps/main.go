@@ -962,6 +962,20 @@ func writeLog(dir string, group appGroup, apps []appEntry, missing int, saveErr 
 	if pdfErr != nil {
 		sb.WriteString(fmt.Sprintf("PDF errors: %v\n", pdfErr))
 	}
+	sb.WriteString("\nApps:\n")
+	for _, app := range apps {
+		iconStatus := "no"
+		iconPath := ""
+		if app.HasIcon {
+			iconStatus = "yes"
+			iconPath = app.IconPath
+		}
+		sb.WriteString(fmt.Sprintf("- Name: %s | Icon: %s | Path: %s", app.Name, iconStatus, app.Path))
+		if iconPath != "" {
+			sb.WriteString(fmt.Sprintf(" | IconPath: %s", iconPath))
+		}
+		sb.WriteString("\n")
+	}
 	path := filepath.Join(dir, logFileName)
 	return os.WriteFile(path, []byte(sb.String()), 0644)
 }

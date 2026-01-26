@@ -7,6 +7,7 @@ import (
 	"image"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -76,6 +77,7 @@ var (
 		" uninstall",
 		" setup",
 	}
+	msiProductCodePattern = regexp.MustCompile(`(?i)\{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}`)
 )
 
 type IShellLinkW struct {
@@ -531,10 +533,23 @@ func appFromUninstallKey(key registry.Key) (AppInfo, error) {
 		}
 	}
 
+	msiCode := msiProductCodeFromStrings(uninstallString, quietUninstallString, modifyPath)
+	if (iconPath == "" || appPath == "") && msiCode != "" {
+		msiIconPath, msiInstallLocation, _ := msiProductInfo(msiCode)
+		if iconPath == "" && msiIconPath != "" {
+			iconPath, iconIndex, hasIndex = parseIconLocation(msiIconPath)
+			iconPath = normalizePath(iconPath)
+		}
+		if appPath == "" && msiInstallLocation != "" {
+			appPath = normalizePath(msiInstallLocation)
+		}
+	}
+
 	var icon *image.RGBA
 	var iconErr error
 	if iconPath != "" {
-		icon, iconErr = iconFromFile(iconPath, iconIndex, hasIndex)
+		forceIndex := hasIndex || filepath.Ext(iconPath) == ""
+		icon, iconErr = iconFromFile(iconPath, iconIndex, forceIndex)
 	} else if appPath != "" {
 		icon, iconErr = iconFromFile(appPath, 0, false)
 	} else {
@@ -761,6 +776,115 @@ func normalizeAppsFolderPath(path string) string {
 		return shellAppsFolder
 	}
 	return path
+}
+
+func msiProductCodeFromStrings(values ...string) string {
+	for _, value := range values {
+		code := extractMsiProductCode(value)
+		if code != "" {
+			return code
+		}
+	}
+	return ""
+}
+
+func extractMsiProductCode(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	match := msiProductCodePattern.FindString(value)
+	if match == "" {
+		return ""
+	}
+	return strings.ToUpper(match)
+}
+
+func msiProductInfo(productCode string) (string, string, error) {
+	productCode = strings.TrimSpace(productCode)
+	if productCode == "" {
+		return "", "", nil
+	}
+	packed := packMsiProductCode(productCode)
+	if packed == "" {
+		return "", "", errors.New("invalid MSI product code")
+	}
+
+	var errs []error
+	iconPath, err := readRegistryString(registry.LOCAL_MACHINE, `Software\Classes\Installer\Products\`+packed, "ProductIcon")
+	if err != nil {
+		errs = append(errs, err)
+	}
+	if iconPath == "" {
+		iconPath, err = readRegistryString(registry.LOCAL_MACHINE, `Software\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\`+packed+`\InstallProperties`, "DisplayIcon")
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	installLocation, err := readRegistryString(registry.LOCAL_MACHINE, `Software\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\`+packed+`\InstallProperties`, "InstallLocation")
+	if err != nil {
+		errs = append(errs, err)
+	}
+	if installLocation == "" {
+		installLocation, err = readRegistryString(registry.LOCAL_MACHINE, `Software\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\`+packed+`\InstallProperties`, "InstallSource")
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return iconPath, installLocation, joinErrors(errs)
+}
+
+func packMsiProductCode(code string) string {
+	code = strings.TrimSpace(code)
+	code = strings.Trim(code, "{}")
+	code = strings.ReplaceAll(code, "-", "")
+	if len(code) != 32 {
+		return ""
+	}
+	part1 := reverseString(code[0:8])
+	part2 := reverseString(code[8:12])
+	part3 := reverseString(code[12:16])
+	part4 := swapNibbles(code[16:20])
+	part5 := swapNibbles(code[20:32])
+	return strings.ToUpper(part1 + part2 + part3 + part4 + part5)
+}
+
+func reverseString(value string) string {
+	b := []byte(value)
+	for i, j := 0, len(b)-1; i < j; i, j = i+1, j-1 {
+		b[i], b[j] = b[j], b[i]
+	}
+	return string(b)
+}
+
+func swapNibbles(value string) string {
+	b := []byte(value)
+	for i := 0; i+1 < len(b); i += 2 {
+		b[i], b[i+1] = b[i+1], b[i]
+	}
+	return string(b)
+}
+
+func readRegistryString(root registry.Key, path string, name string) (string, error) {
+	key, err := registry.OpenKey(root, path, registry.READ)
+	if err != nil {
+		if errors.Is(err, registry.ErrNotExist) {
+			return "", nil
+		}
+		return "", err
+	}
+	defer key.Close()
+
+	value, _, err := key.GetStringValue(name)
+	if err != nil {
+		if errors.Is(err, registry.ErrNotExist) {
+			return "", nil
+		}
+		return "", err
+	}
+	return value, nil
 }
 
 func shouldSkipDesktopExe(path string) bool {
