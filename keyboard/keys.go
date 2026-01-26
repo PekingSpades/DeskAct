@@ -74,7 +74,6 @@ const (
 	Enter     = "enter"
 	Tab       = "tab"
 	Esc       = "esc"
-	Escape    = "escape"
 	Up        = "up"    // Up arrow key
 	Down      = "down"  // Down arrow key
 	Right     = "right" // Right arrow key
@@ -112,22 +111,18 @@ const (
 	Cmd  = "cmd"  // is the "win" key for windows
 	Lcmd = "lcmd" // left command
 	Rcmd = "rcmd" // right command
-	// "command"
 	Alt     = "alt"
 	Lalt    = "lalt" // left alt
 	Ralt    = "ralt" // right alt
 	Ctrl    = "ctrl"
 	Lctrl   = "lctrl" // left ctrl
 	Rctrl   = "rctrl" // right ctrl
-	Control = "control"
 	Shift   = "shift"
 	Lshift  = "lshift" // left shift
 	Rshift  = "rshift" // right shift
-	// "right_shift"
 	Capslock    = "capslock"
 	Space       = "space"
 	Print       = "print"
-	Printscreen = "printscreen" // No Mac support
 	Insert      = "insert"
 	Menu        = "menu" // Windows only
 

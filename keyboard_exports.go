@@ -88,7 +88,6 @@ const (
 	Enter               = kbd.Enter
 	Tab                 = kbd.Tab
 	Esc                 = kbd.Esc
-	Escape              = kbd.Escape
 	Up                  = kbd.Up
 	Down                = kbd.Down
 	Right               = kbd.Right
@@ -130,14 +129,12 @@ const (
 	Ctrl                = kbd.Ctrl
 	Lctrl               = kbd.Lctrl
 	Rctrl               = kbd.Rctrl
-	Control             = kbd.Control
 	Shift               = kbd.Shift
 	Lshift              = kbd.Lshift
 	Rshift              = kbd.Rshift
 	Capslock            = kbd.Capslock
 	Space               = kbd.Space
 	Print               = kbd.Print
-	Printscreen         = kbd.Printscreen
 	Insert              = kbd.Insert
 	Menu                = kbd.Menu
 	AudioMute           = kbd.AudioMute
@@ -191,12 +188,12 @@ func KeyNames() []string {
 	return kbd.KeyNames()
 }
 
-func ModifierNames() []Modifier {
-	return kbd.ModifierNames()
+func SupportedKeyNames() []string {
+	return kbd.SupportedKeyNames()
 }
 
-func KeyAliases() map[string]string {
-	return kbd.KeyAliases()
+func ModifierNames() []Modifier {
+	return kbd.ModifierNames()
 }
 
 func DefaultSpecialKeys() map[string]string {

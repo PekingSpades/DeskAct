@@ -244,8 +244,7 @@ func checkKeyCodes(k string) (key C.MMKeyCode, err error) {
 		return
 	}
 
-	keyName := canonicalizeKeyName(k)
-	if v, ok := keyNameMap[keyName]; ok {
+	if v, ok := keyNameMap[k]; ok {
 		key = v
 		if key == C.K_NOT_A_KEY {
 			return 0, keyLookupError(ErrUnsupportedKey, k)
