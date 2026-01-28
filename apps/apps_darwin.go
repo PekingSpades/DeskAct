@@ -125,7 +125,6 @@ static void free_icon_data(void *data) {
 import "C"
 
 import (
-	"errors"
 	"image"
 	"io/fs"
 	"os"

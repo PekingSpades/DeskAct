@@ -79,15 +79,15 @@ func currentState() (stateSnapshot, error) {
 	var capsOk C.bool
 	var numOk C.bool
 	if C.deskactGetLockStates(&caps, &num, &capsOk, &numOk) == 0 {
-		if capsOk != 0 {
+		if bool(capsOk) {
 			state.mask &^= bitCapsLock
-			if caps != 0 {
+			if bool(caps) {
 				state.mask |= bitCapsLock
 			}
 		}
-		if numOk != 0 {
+		if bool(numOk) {
 			state.supported |= bitNumLock
-			if num != 0 {
+			if bool(num) {
 				state.mask |= bitNumLock
 			}
 		}
