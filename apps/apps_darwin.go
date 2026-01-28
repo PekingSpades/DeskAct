@@ -12,44 +12,42 @@ package apps
 #include <string.h>
 
 static char *resolve_alias_path(const char *path) {
-	if (!path) {
-		return NULL;
-	}
-	CFURLRef url = CFURLCreateFromFileSystemRepresentation(kCFAllocatorDefault, (const UInt8 *)path, (CFIndex)strlen(path), false);
-	if (!url) {
-		return NULL;
-	}
-	Boolean wasAliased = false;
-	CFErrorRef error = NULL;
-	CFURLRef resolved = CFURLCreateByResolvingAliasFile(kCFAllocatorDefault, url, 0, &wasAliased, &error);
-	CFRelease(url);
-	if (!resolved) {
-		if (error) {
-			CFRelease(error);
+	@autoreleasepool {
+		if (!path) {
+			return NULL;
 		}
-		return NULL;
+		NSString *nsPath = [NSString stringWithUTF8String:path];
+		if (!nsPath) {
+			return NULL;
+		}
+		NSURL *url = [NSURL fileURLWithPath:nsPath];
+		if (!url) {
+			return NULL;
+		}
+
+		NSNumber *isAlias = nil;
+		NSError *error = nil;
+		if (![url getResourceValue:&isAlias forKey:NSURLIsAliasFileKey error:&error]) {
+			return NULL;
+		}
+		if (![isAlias boolValue]) {
+			return NULL;
+		}
+
+		NSURL *resolved = [NSURL URLByResolvingAliasFileAtURL:url options:0 error:&error];
+		if (!resolved) {
+			return NULL;
+		}
+		NSString *resolvedPath = [resolved path];
+		if (!resolvedPath) {
+			return NULL;
+		}
+		const char *resolvedC = [resolvedPath fileSystemRepresentation];
+		if (!resolvedC) {
+			return NULL;
+		}
+		return strdup(resolvedC);
 	}
-	if (!wasAliased) {
-		CFRelease(resolved);
-		return NULL;
-	}
-	CFStringRef cfPath = CFURLCopyFileSystemPath(resolved, kCFURLPOSIXPathStyle);
-	CFRelease(resolved);
-	if (!cfPath) {
-		return NULL;
-	}
-	CFIndex maxSize = CFStringGetMaximumSizeForEncoding(CFStringGetLength(cfPath), kCFStringEncodingUTF8) + 1;
-	char *buffer = (char *)malloc(maxSize);
-	if (!buffer) {
-		CFRelease(cfPath);
-		return NULL;
-	}
-	if (!CFStringGetCString(cfPath, buffer, maxSize, kCFStringEncodingUTF8)) {
-		free(buffer);
-		buffer = NULL;
-	}
-	CFRelease(cfPath);
-	return buffer;
 }
 
 static unsigned char *icon_rgba_for_path(const char *path, int *width, int *height) {

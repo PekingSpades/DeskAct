@@ -12,7 +12,6 @@ package keyboardstate
 #include <IOKit/hidsystem/IOHIDLib.h>
 #include <IOKit/hidsystem/IOHIDParameter.h>
 #include <IOKit/hidsystem/IOHIDShared.h>
-#include <IOKit/hidsystem/IOHIDSystem.h>
 
 static uint64_t deskactKeyFlagsState(void) {
 	return (uint64_t)CGEventSourceFlagsState(kCGEventSourceStateCombinedSessionState);
@@ -25,7 +24,7 @@ static int deskactGetLockStates(bool *caps, bool *num, bool *capsOk, bool *numOk
 	*numOk = false;
 
 	io_service_t service = IOServiceGetMatchingService(kIOMasterPortDefault,
-		IOServiceMatching(kIOHIDSystemClass));
+		IOServiceMatching("IOHIDSystem"));
 	if (service == 0) {
 		return -1;
 	}
@@ -96,4 +95,3 @@ func currentState() (stateSnapshot, error) {
 
 	return state, nil
 }
-

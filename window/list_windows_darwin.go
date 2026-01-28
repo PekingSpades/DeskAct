@@ -216,7 +216,7 @@ func listWindows(options WindowOptions) ([]WindowInfo, error) {
 			platform: &DarwinPlatformInfo{
 				WindowID:  uint32(item.windowID),
 				OwnerName: ownerName,
-				Layer:     item.layer,
+				Layer:     int32(item.layer),
 				Alpha:     float64(item.alpha),
 				Onscreen:  onScreen,
 			},
