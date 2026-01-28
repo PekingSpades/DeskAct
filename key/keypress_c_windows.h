@@ -233,7 +233,47 @@ void toggleKey(char c, const bool down, MMKeyFlags flags, uintptr pid) {
 void unicodeType(const unsigned value, uintptr pid, int8_t isPid) {
 	if (pid != 0) {
 		HWND hwnd = getHwnd(pid, isPid);
+		if (value > 0xFFFF) {
+			uint32_t v = (uint32_t)value - 0x10000;
+			WCHAR hi = (WCHAR)(0xD800 + (v >> 10));
+			WCHAR lo = (WCHAR)(0xDC00 + (v & 0x3FF));
+			PostMessageW(hwnd, WM_CHAR, hi, 0);
+			PostMessageW(hwnd, WM_CHAR, lo, 0);
+			return;
+		}
 		PostMessageW(hwnd, WM_CHAR, value, 0);
+		return;
+	}
+
+	if (value > 0xFFFF) {
+		uint32_t v = (uint32_t)value - 0x10000;
+		WORD hi = (WORD)(0xD800 + (v >> 10));
+		WORD lo = (WORD)(0xDC00 + (v & 0x3FF));
+
+		INPUT input[4];
+		memset(input, 0, sizeof(input));
+
+		input[0].type = INPUT_KEYBOARD;
+		input[0].ki.wVk = 0;
+		input[0].ki.wScan = hi;
+		input[0].ki.dwFlags = 0x4; // KEYEVENTF_UNICODE
+
+		input[1].type = INPUT_KEYBOARD;
+		input[1].ki.wVk = 0;
+		input[1].ki.wScan = hi;
+		input[1].ki.dwFlags = KEYEVENTF_KEYUP | 0x4;
+
+		input[2].type = INPUT_KEYBOARD;
+		input[2].ki.wVk = 0;
+		input[2].ki.wScan = lo;
+		input[2].ki.dwFlags = 0x4; // KEYEVENTF_UNICODE
+
+		input[3].type = INPUT_KEYBOARD;
+		input[3].ki.wVk = 0;
+		input[3].ki.wScan = lo;
+		input[3].ki.dwFlags = KEYEVENTF_KEYUP | 0x4;
+
+		SendInput(4, input, sizeof(INPUT));
 		return;
 	}
 

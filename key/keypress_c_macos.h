@@ -235,7 +235,7 @@ void toggleKey(char c, const bool down, MMKeyFlags flags, uintptr pid) {
 	}
 }
 
-void toggleUnicode(UniChar ch, const bool down, uintptr pid) {
+void toggleUnicode(const UniChar *chars, size_t len, const bool down, uintptr pid) {
 	CGEventSourceRef source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
 	CGEventRef keyEvent = CGEventCreateKeyboardEvent(source, 0, down);
 	if (keyEvent == NULL) {
@@ -244,16 +244,27 @@ void toggleUnicode(UniChar ch, const bool down, uintptr pid) {
 		return;
 	}
 
-	CGEventKeyboardSetUnicodeString(keyEvent, 1, &ch);
+	CGEventKeyboardSetUnicodeString(keyEvent, (UniCharCount)len, chars);
 	SendTo(pid, keyEvent);
 	CFRelease(source);
 }
 
 void unicodeType(const unsigned value, uintptr pid, int8_t isPid) {
-	UniChar ch = (UniChar)value;
-	toggleUnicode(ch, true, pid);
+	UniChar chars[2];
+	size_t len = 1;
+
+	if (value > 0xFFFF) {
+		uint32_t v = (uint32_t)value - 0x10000;
+		chars[0] = (UniChar)(0xD800 + (v >> 10));
+		chars[1] = (UniChar)(0xDC00 + (v & 0x3FF));
+		len = 2;
+	} else {
+		chars[0] = (UniChar)value;
+	}
+
+	toggleUnicode(chars, len, true, pid);
 	microsleep(5.0);
-	toggleUnicode(ch, false, pid);
+	toggleUnicode(chars, len, false, pid);
 }
 
 int input_utf(const char *utf) {
