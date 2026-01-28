@@ -64,6 +64,7 @@ jobs:
           fi
           go build -v -o "capture-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/capture
           go build -v -o "display-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/display
+          go build -v -o "keyboard-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/keyboard
           go build -v -o "mouse-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/mouse
           go build -v -o "window-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/window
           go build -v -o "apps-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/apps
@@ -77,6 +78,7 @@ jobs:
           path: |
             capture-${{ matrix.goos }}-${{ matrix.goarch }}*
             display-${{ matrix.goos }}-${{ matrix.goarch }}*
+            keyboard-${{ matrix.goos }}-${{ matrix.goarch }}*
             mouse-${{ matrix.goos }}-${{ matrix.goarch }}*
             window-${{ matrix.goos }}-${{ matrix.goarch }}*
             apps-${{ matrix.goos }}-${{ matrix.goarch }}*
@@ -100,6 +102,7 @@ jobs:
           files=(
             capture-${{ matrix.goos }}-${{ matrix.goarch }}*
             display-${{ matrix.goos }}-${{ matrix.goarch }}*
+            keyboard-${{ matrix.goos }}-${{ matrix.goarch }}*
             mouse-${{ matrix.goos }}-${{ matrix.goarch }}*
             window-${{ matrix.goos }}-${{ matrix.goarch }}*
             apps-${{ matrix.goos }}-${{ matrix.goarch }}*
