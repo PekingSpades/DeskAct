@@ -8,6 +8,7 @@ package keyboardstate
 #cgo linux LDFLAGS: -L/usr/src -lm -lX11 -lXtst
 
 #include "../base/xdisplay_c.h"
+#include <stdint.h>
 #include <X11/XKBlib.h>
 #include <X11/keysym.h>
 
@@ -127,4 +128,3 @@ func currentState() (stateSnapshot, error) {
 	state.supported = uint32(supported)
 	return state, nil
 }
-
