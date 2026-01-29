@@ -88,6 +88,36 @@ jobs:
           commit_hash="${GITHUB_SHA}"
           base_path="/${repo_name}/${date_str}/${commit_hash}/"
           server_url="${ARTIFACT_SERVER_URL%/}"
+          auth="${ARTIFACT_USER}:${ARTIFACT_PASSWORD}"
+          curl_status() {
+            curl --http1.1 --silent --output /dev/null -w "%{http_code}" "$@"
+          }
+          ensure_dir() {
+            local dir="$1"
+            local url="${server_url}${dir}"
+            local status
+            status=$(curl_status -u "${auth}" "${url}")
+            if [[ "${status}" == 2* ]]; then
+              echo "Dir exists: ${dir}"
+              return 0
+            fi
+            if [[ "${status}" != "404" ]]; then
+              echo "Unexpected status ${status} when checking ${dir}"
+              return 1
+            fi
+            local target="${dir%/}"
+            local parent="${target%/*}/"
+            local name="${target##*/}"
+            echo "Creating dir: ${dir}"
+            status=$(curl_status -u "${auth}" -F "mkdir=${name}" "${server_url}/upload?path=${parent}")
+            if [[ "${status}" != 2* && "${status}" != 3* ]]; then
+              echo "Failed to create ${dir} (HTTP ${status})"
+              return 1
+            fi
+          }
+          ensure_dir "/${repo_name}/"
+          ensure_dir "/${repo_name}/${date_str}/"
+          ensure_dir "/${repo_name}/${date_str}/${commit_hash}/"
           shopt -s nullglob
           files=(deskact-tester-${{ matrix.goos }}-${{ matrix.goarch }}*)
           if [ ${#files[@]} -eq 0 ]; then
@@ -100,14 +130,12 @@ jobs:
               relative_path="${repo_name}/${date_str}/${commit_hash}/${filename}"
               echo "Uploading ${filename}..."
               for attempt in 1 2 3; do
-                if curl --http1.1 -f --max-time 300 --silent --output /dev/null \
-                  -u "${ARTIFACT_USER}:${ARTIFACT_PASSWORD}" \
-                  -F "path=@${file}" \
-                  "${server_url}/upload?path=${base_path}"; then
+                status=$(curl_status --max-time 300 -u "${auth}" -F "file=@${file}" "${server_url}/upload?path=${base_path}")
+                if [[ "${status}" == 2* || "${status}" == 3* ]]; then
                   echo "${relative_path}"
                   break
                 else
-                  echo "Attempt ${attempt} failed for ${filename}"
+                  echo "Attempt ${attempt} failed for ${filename} (HTTP ${status})"
                   if [ "$attempt" -eq 3 ]; then
                     echo "Failed to upload ${filename} after 3 attempts"
                     exit 1
