@@ -62,7 +62,7 @@ jobs:
           if [ "${{ matrix.goos }}" = "windows" ]; then
             suffix=".exe"
           fi
-          go build -v -o "deskact-tester-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./cmd/deskact-tester
+          go build -a -v -o "deskact-tester-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./cmd/deskact-tester
 
       - name: Upload artifact
         id: upload_github_artifact

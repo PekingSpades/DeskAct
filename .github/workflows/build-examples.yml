@@ -62,12 +62,12 @@ jobs:
           if [ "${{ matrix.goos }}" = "windows" ]; then
             suffix=".exe"
           fi
-          go build -v -o "capture-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/capture
-          go build -v -o "display-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/display
-          go build -v -o "keyboard-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/keyboard
-          go build -v -o "mouse-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/mouse
-          go build -v -o "window-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/window
-          go build -v -o "apps-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/apps
+          go build -a -v -o "capture-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/capture
+          go build -a -v -o "display-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/display
+          go build -a -v -o "keyboard-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/keyboard
+          go build -a -v -o "mouse-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/mouse
+          go build -a -v -o "window-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/window
+          go build -a -v -o "apps-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/apps
 
       - name: Upload artifacts
         id: upload_github_artifacts
