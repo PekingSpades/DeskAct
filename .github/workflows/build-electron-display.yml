@@ -46,22 +46,27 @@ jobs:
       - name: Compress build output
         shell: bash
         run: |
-          unpacked_dir=""
-          for d in dist/*-unpacked; do
+          # electron-builder output directories:
+          #   Windows: dist/win-unpacked/
+          #   macOS:   dist/mac-arm64/ (contains .app bundle)
+          ls -la dist/
+          output_dir=""
+          for d in dist/*-unpacked dist/mac-*; do
             if [ -d "$d" ]; then
-              unpacked_dir="$d"
+              output_dir="$d"
               break
             fi
           done
-          if [ -z "$unpacked_dir" ]; then
-            echo "No unpacked directory found"
+          if [ -z "$output_dir" ]; then
+            echo "No build output directory found"
             exit 1
           fi
+          echo "Found output dir: ${output_dir}"
           archive_name="${{ matrix.artifact-name }}.zip"
           if command -v zip &>/dev/null; then
-            (cd "$unpacked_dir" && zip -r "../../${archive_name}" .)
+            (cd "$output_dir" && zip -ry "../../${archive_name}" .)
           else
-            powershell -Command "Compress-Archive -Path '${unpacked_dir}\*' -DestinationPath '${archive_name}'"
+            powershell -Command "Compress-Archive -Path '${output_dir}\*' -DestinationPath '${archive_name}'"
           fi
           echo "Compressed: ${archive_name}"
           ls -lh "${archive_name}"
@@ -73,6 +78,7 @@ jobs:
         with:
           name: ${{ matrix.artifact-name }}
           path: examples/display/electron/${{ matrix.artifact-name }}.zip
+          compression-level: 0
           retention-days: 7
 
       - name: Upload artifacts to server
