@@ -34,13 +34,14 @@ func MainDisplay(options DisplayOptions) *Display {
 	}
 
 	return &Display{
-		id:       int(info.handle),
-		index:    int(info.index),
-		isMain:   info.isMain != 0,
-		origin:   Rect{Point: Point{X: int(info.x), Y: int(info.y)}, Size: Size{W: logicalW, H: logicalH}},
-		size:     Size{W: physW, H: physH},
-		scale:    scale,
-		dpiAware: options.DPIAware,
+		id:         int(info.handle),
+		electronId: int64(info.electronId),
+		index:      int(info.index),
+		isMain:     info.isMain != 0,
+		origin:     Rect{Point: Point{X: int(info.x), Y: int(info.y)}, Size: Size{W: logicalW, H: logicalH}},
+		size:       Size{W: physW, H: physH},
+		scale:      scale,
+		dpiAware:   options.DPIAware,
 	}
 }
 
@@ -67,13 +68,14 @@ func AllDisplays(options DisplayOptions) []*Display {
 		}
 
 		displays[i] = &Display{
-			id:       int(info.handle),
-			index:    int(info.index),
-			isMain:   info.isMain != 0,
-			origin:   Rect{Point: Point{X: int(info.x), Y: int(info.y)}, Size: Size{W: logicalW, H: logicalH}},
-			size:     Size{W: physW, H: physH},
-			scale:    scale,
-			dpiAware: options.DPIAware,
+			id:         int(info.handle),
+			electronId: int64(info.electronId),
+			index:      int(info.index),
+			isMain:     info.isMain != 0,
+			origin:     Rect{Point: Point{X: int(info.x), Y: int(info.y)}, Size: Size{W: logicalW, H: logicalH}},
+			size:       Size{W: physW, H: physH},
+			scale:      scale,
+			dpiAware:   options.DPIAware,
 		}
 	}
 
@@ -102,13 +104,14 @@ func DisplayAt(index int, options DisplayOptions) *Display {
 	}
 
 	return &Display{
-		id:       int(info.handle),
-		index:    int(info.index),
-		isMain:   info.isMain != 0,
-		origin:   Rect{Point: Point{X: int(info.x), Y: int(info.y)}, Size: Size{W: logicalW, H: logicalH}},
-		size:     Size{W: physW, H: physH},
-		scale:    scale,
-		dpiAware: options.DPIAware,
+		id:         int(info.handle),
+		electronId: int64(info.electronId),
+		index:      int(info.index),
+		isMain:     info.isMain != 0,
+		origin:     Rect{Point: Point{X: int(info.x), Y: int(info.y)}, Size: Size{W: logicalW, H: logicalH}},
+		size:       Size{W: physW, H: physH},
+		scale:      scale,
+		dpiAware:   options.DPIAware,
 	}
 }
 

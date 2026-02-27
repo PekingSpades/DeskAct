@@ -65,13 +65,14 @@ func MainDisplay(options DisplayOptions) *Display {
 	}
 
 	return &Display{
-		id:       int(info.handle),
-		index:    int(info.index),
-		isMain:   info.isMain != 0,
-		origin:   origin,
-		size:     Size{W: physW, H: physH},
-		scale:    scale,
-		dpiAware: dpiAware,
+		id:         int(info.handle),
+		electronId: int64(info.electronId),
+		index:      int(info.index),
+		isMain:     info.isMain != 0,
+		origin:     origin,
+		size:       Size{W: physW, H: physH},
+		scale:      scale,
+		dpiAware:   dpiAware,
 		platform: &WindowsPlatformInfo{
 			PhysicalOrigin: physicalOrigin,
 		},
@@ -121,13 +122,14 @@ func AllDisplays(options DisplayOptions) []*Display {
 		}
 
 		displays[i] = &Display{
-			id:       int(info.handle),
-			index:    int(info.index),
-			isMain:   info.isMain != 0,
-			origin:   origin,
-			size:     Size{W: physW, H: physH},
-			scale:    scale,
-			dpiAware: dpiAware,
+			id:         int(info.handle),
+			electronId: int64(info.electronId),
+			index:      int(info.index),
+			isMain:     info.isMain != 0,
+			origin:     origin,
+			size:       Size{W: physW, H: physH},
+			scale:      scale,
+			dpiAware:   dpiAware,
 			platform: &WindowsPlatformInfo{
 				PhysicalOrigin: physicalOrigin,
 			},
@@ -179,13 +181,14 @@ func DisplayAt(index int, options DisplayOptions) *Display {
 	}
 
 	return &Display{
-		id:       int(info.handle),
-		index:    int(info.index),
-		isMain:   info.isMain != 0,
-		origin:   origin,
-		size:     Size{W: physW, H: physH},
-		scale:    scale,
-		dpiAware: dpiAware,
+		id:         int(info.handle),
+		electronId: int64(info.electronId),
+		index:      int(info.index),
+		isMain:     info.isMain != 0,
+		origin:     origin,
+		size:       Size{W: physW, H: physH},
+		scale:      scale,
+		dpiAware:   dpiAware,
 		platform: &WindowsPlatformInfo{
 			PhysicalOrigin: physicalOrigin,
 		},

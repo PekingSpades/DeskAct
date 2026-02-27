@@ -8,19 +8,21 @@ type PlatformInfo interface {
 
 // Display represents a physical display/monitor.
 type Display struct {
-	id       int          // Platform-specific display ID
-	index    int          // Display index (0 is main display)
-	isMain   bool         // Whether this is the main display
-	origin   Rect         // Bounds in platform's coordinate system (position + logical size)
-	size     Size         // Physical pixel size
-	scale    float64      // Scale factor (physical pixels / virtual points)
-	platform PlatformInfo // Platform-specific information (nil if not set)
-	dpiAware bool         // Windows-only DPI awareness flag
+	id         int          // Platform-specific display ID
+	electronId int64        // Electron/Chromium-compatible display ID
+	index      int          // Display index (0 is main display)
+	isMain     bool         // Whether this is the main display
+	origin     Rect         // Bounds in platform's coordinate system (position + logical size)
+	size       Size         // Physical pixel size
+	scale      float64      // Scale factor (physical pixels / virtual points)
+	platform   PlatformInfo // Platform-specific information (nil if not set)
+	dpiAware   bool         // Windows-only DPI awareness flag
 }
 
 // DisplayInfo contains detailed information about a display.
 type DisplayInfo struct {
 	ID          int     // Platform-specific ID
+	ElectronID  int64   // Electron/Chromium-compatible display ID
 	Index       int     // Index
 	IsMain      bool    // Whether this is the main display
 	Origin      Rect    // Bounds in platform's coordinate system
@@ -31,6 +33,11 @@ type DisplayInfo struct {
 // ID returns the platform-specific display identifier.
 func (d *Display) ID() int {
 	return d.id
+}
+
+// ElectronID returns an Electron/Chromium-compatible display identifier.
+func (d *Display) ElectronID() int64 {
+	return d.electronId
 }
 
 // Index returns the display index (0 is the main display).
@@ -77,6 +84,7 @@ func (d *Display) GetPlatformInfo() PlatformInfo {
 func (d *Display) Info() DisplayInfo {
 	return DisplayInfo{
 		ID:          d.id,
+		ElectronID:  d.electronId,
 		Index:       d.index,
 		IsMain:      d.isMain,
 		Origin:      d.origin,

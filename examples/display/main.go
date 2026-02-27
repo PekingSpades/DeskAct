@@ -32,12 +32,13 @@ func main() {
 	for _, d := range displays {
 		info := d.Info()
 		fmt.Printf("Display #%d\n", info.Index)
-		fmt.Printf("  ID:       %d\n", info.ID)
-		fmt.Printf("  IsMain:   %v\n", info.IsMain)
-		fmt.Printf("  Origin:   {X: %d, Y: %d, W: %d, H: %d}\n",
+		fmt.Printf("  ID:         %d\n", info.ID)
+		fmt.Printf("  ElectronID: %d\n", info.ElectronID)
+		fmt.Printf("  IsMain:     %v\n", info.IsMain)
+		fmt.Printf("  Origin:     {X: %d, Y: %d, W: %d, H: %d}\n",
 			info.Origin.X, info.Origin.Y, info.Origin.W, info.Origin.H)
-		fmt.Printf("  Size:     {W: %d, H: %d}\n", info.Size.W, info.Size.H)
-		fmt.Printf("  Scale:    %.2f\n", info.ScaleFactor)
+		fmt.Printf("  Size:       {W: %d, H: %d}\n", info.Size.W, info.Size.H)
+		fmt.Printf("  Scale:      %.2f\n", info.ScaleFactor)
 		fmt.Println("----------------------------------------")
 	}
 
@@ -103,8 +104,8 @@ func main() {
 	logBuilder.WriteString(fmt.Sprintf("Total displays: %d\n", count))
 	for _, d := range displays {
 		info := d.Info()
-		logBuilder.WriteString(fmt.Sprintf("Display #%d: ID=%d, IsMain=%v, Origin=(%d,%d,%d,%d), Size=%dx%d, Scale=%.2f\n",
-			info.Index, info.ID, info.IsMain, info.Origin.X, info.Origin.Y, info.Origin.W, info.Origin.H, info.Size.W, info.Size.H, info.ScaleFactor))
+		logBuilder.WriteString(fmt.Sprintf("Display #%d: ID=%d, ElectronID=%d, IsMain=%v, Origin=(%d,%d,%d,%d), Size=%dx%d, Scale=%.2f\n",
+			info.Index, info.ID, info.ElectronID, info.IsMain, info.Origin.X, info.Origin.Y, info.Origin.W, info.Origin.H, info.Size.W, info.Size.H, info.ScaleFactor))
 	}
 
 	fmt.Println("\nPress 's' to save log and exit, or 'e' to exit directly:")

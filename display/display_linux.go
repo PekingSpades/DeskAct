@@ -5,7 +5,7 @@ package display
 
 /*
 #cgo linux CFLAGS: -I/usr/src
-#cgo linux LDFLAGS: -L/usr/src -lm -lX11 -lXtst -lXinerama
+#cgo linux LDFLAGS: -L/usr/src -lm -lX11 -lXtst -lXinerama -lXrandr
 
 #include "display_c.h"
 */
@@ -23,13 +23,14 @@ func MainDisplay(options DisplayOptions) *Display {
 	info := C.getMainDisplay()
 	physW, physH := int(info.w), int(info.h)
 	return &Display{
-		id:       int(info.handle),
-		index:    int(info.index),
-		isMain:   info.isMain != 0,
-		origin:   Rect{Point: Point{X: int(info.x), Y: int(info.y)}, Size: Size{W: physW, H: physH}},
-		size:     Size{W: physW, H: physH},
-		scale:    float64(info.scale),
-		dpiAware: options.DPIAware,
+		id:         int(info.handle),
+		electronId: int64(info.electronId),
+		index:      int(info.index),
+		isMain:     info.isMain != 0,
+		origin:     Rect{Point: Point{X: int(info.x), Y: int(info.y)}, Size: Size{W: physW, H: physH}},
+		size:       Size{W: physW, H: physH},
+		scale:      float64(info.scale),
+		dpiAware:   options.DPIAware,
 	}
 }
 
@@ -48,13 +49,14 @@ func AllDisplays(options DisplayOptions) []*Display {
 		info := cDisplays[i]
 		physW, physH := int(info.w), int(info.h)
 		displays[i] = &Display{
-			id:       int(info.handle),
-			index:    int(info.index),
-			isMain:   info.isMain != 0,
-			origin:   Rect{Point: Point{X: int(info.x), Y: int(info.y)}, Size: Size{W: physW, H: physH}},
-			size:     Size{W: physW, H: physH},
-			scale:    float64(info.scale),
-			dpiAware: options.DPIAware,
+			id:         int(info.handle),
+			electronId: int64(info.electronId),
+			index:      int(info.index),
+			isMain:     info.isMain != 0,
+			origin:     Rect{Point: Point{X: int(info.x), Y: int(info.y)}, Size: Size{W: physW, H: physH}},
+			size:       Size{W: physW, H: physH},
+			scale:      float64(info.scale),
+			dpiAware:   options.DPIAware,
 		}
 	}
 
@@ -75,13 +77,14 @@ func DisplayAt(index int, options DisplayOptions) *Display {
 
 	physW, physH := int(info.w), int(info.h)
 	return &Display{
-		id:       int(info.handle),
-		index:    int(info.index),
-		isMain:   info.isMain != 0,
-		origin:   Rect{Point: Point{X: int(info.x), Y: int(info.y)}, Size: Size{W: physW, H: physH}},
-		size:     Size{W: physW, H: physH},
-		scale:    float64(info.scale),
-		dpiAware: options.DPIAware,
+		id:         int(info.handle),
+		electronId: int64(info.electronId),
+		index:      int(info.index),
+		isMain:     info.isMain != 0,
+		origin:     Rect{Point: Point{X: int(info.x), Y: int(info.y)}, Size: Size{W: physW, H: physH}},
+		size:       Size{W: physW, H: physH},
+		scale:      float64(info.scale),
+		dpiAware:   options.DPIAware,
 	}
 }
 

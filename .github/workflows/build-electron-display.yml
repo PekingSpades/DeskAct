@@ -1,0 +1,142 @@
+name: Build Electron Display
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            arch: x64
+            artifact-name: electron-display-win-x64
+          - os: macos-15
+            platform: mac
+            arch: arm64
+            artifact-name: electron-display-mac-arm64
+
+    runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        working-directory: examples/display/electron
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        shell: bash
+        run: npx electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --publish never
+
+      - name: Compress build output
+        shell: bash
+        run: |
+          unpacked_dir=""
+          for d in dist/*-unpacked; do
+            if [ -d "$d" ]; then
+              unpacked_dir="$d"
+              break
+            fi
+          done
+          if [ -z "$unpacked_dir" ]; then
+            echo "No unpacked directory found"
+            exit 1
+          fi
+          archive_name="${{ matrix.artifact-name }}.zip"
+          if command -v zip &>/dev/null; then
+            (cd "$unpacked_dir" && zip -r "../../${archive_name}" .)
+          else
+            powershell -Command "Compress-Archive -Path '${unpacked_dir}\*' -DestinationPath '${archive_name}'"
+          fi
+          echo "Compressed: ${archive_name}"
+          ls -lh "${archive_name}"
+
+      - name: Upload artifacts
+        id: upload_github_artifacts
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: examples/display/electron/${{ matrix.artifact-name }}.zip
+          retention-days: 7
+
+      - name: Upload artifacts to server
+        shell: bash
+        continue-on-error: true
+        env:
+          ARTIFACT_SERVER_URL: ${{ secrets.ARTIFACT_SERVER_URL }}
+          ARTIFACT_USER: ${{ secrets.ARTIFACT_SERVER_USER }}
+          ARTIFACT_PASSWORD: ${{ secrets.ARTIFACT_SERVER_PASSWORD }}
+          COMMIT_HASH: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          repo_name="${GITHUB_REPOSITORY##*/}"
+          date_str="$(date -u +%Y-%m-%d)"
+          commit_hash="${COMMIT_HASH}"
+          base_path="/${repo_name}/${date_str}/${commit_hash}/"
+          server_url="${ARTIFACT_SERVER_URL%/}"
+          auth="${ARTIFACT_USER}:${ARTIFACT_PASSWORD}"
+
+          curl_status() {
+            curl --http1.1 --silent --output /dev/null -w "%{http_code}" "$@"
+          }
+
+          ensure_dir() {
+            local dir="$1"
+            local url="${server_url}${dir}"
+            local status
+            status=$(curl_status -u "${auth}" "${url}")
+            if [[ "${status}" == 2* ]]; then
+              echo "Dir exists: ${dir}"
+              return 0
+            fi
+            if [[ "${status}" != "404" ]]; then
+              echo "Unexpected status ${status} when checking ${dir}"
+              return 1
+            fi
+            local target="${dir%/}"
+            local parent="${target%/*}/"
+            local name="${target##*/}"
+            echo "Creating dir: ${dir}"
+            status=$(curl_status -u "${auth}" -F "mkdir=${name}" "${server_url}/upload?path=${parent}")
+            if [[ "${status}" != 2* && "${status}" != 3* ]]; then
+              echo "Failed to create ${dir} (HTTP ${status})"
+              return 1
+            fi
+          }
+
+          ensure_dir "/${repo_name}/"
+          ensure_dir "/${repo_name}/${date_str}/"
+          ensure_dir "/${repo_name}/${date_str}/${commit_hash}/"
+
+          archive_name="${{ matrix.artifact-name }}.zip"
+          echo "Uploading ${archive_name}..."
+          for attempt in 1 2 3; do
+            status=$(curl_status --max-time 600 -u "${auth}" -F "file=@${archive_name}" "${server_url}/upload?path=${base_path}")
+            if [[ "${status}" == 2* || "${status}" == 3* ]]; then
+              echo "${repo_name}/${date_str}/${commit_hash}/${archive_name}"
+              break
+            else
+              echo "Attempt ${attempt} failed (HTTP ${status})"
+              if [ "$attempt" -eq 3 ]; then
+                echo "Failed to upload after 3 attempts"
+                exit 1
+              fi
+              sleep 5
+            fi
+          done

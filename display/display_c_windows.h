@@ -12,7 +12,9 @@
 #define DISPLAY_C_WINDOWS_H
 
 #include "../base/types.h"
+#include "superfasthash.h"
 #include <windows.h>
+#include <stdio.h>
 
 // MDT_EFFECTIVE_DPI for GetDpiForMonitor
 #ifndef MDT_EFFECTIVE_DPI
@@ -54,6 +56,7 @@ typedef struct {
     int32_t vx, vy;     // Virtual (logical) coordinates origin
     int32_t vw, vh;     // Virtual (logical) size
     double  scale;      // Scale factor (physical/logical)
+    int64_t electronId; // Electron/Chromium-compatible display ID
 } DisplayInfoC;
 
 // EnumDisplayContext is the enumeration context
@@ -64,6 +67,80 @@ typedef struct {
     int32_t       maxCount;      // Max count
     int32_t       foundCount;    // Found count
 } EnumDisplayContext;
+
+// Compute Electron/Chromium-compatible display ID for a monitor.
+// Algorithm from chromium/ui/display/win/display_info.cc:71-90:
+// 1. QueryDisplayConfig to get active paths
+// 2. Match GDI device name to find the path
+// 3. Hash "adapterId.LowPart/adapterId.HighPart/targetInfo.id" with SuperFastHash
+// 4. Fallback: hash the device name string
+static int64_t computeElectronDisplayId(MONITORINFOEXW* monInfo) {
+    UINT32 pathCount = 0, modeCount = 0;
+    if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) != ERROR_SUCCESS) {
+        goto fallback;
+    }
+    if (pathCount == 0 || modeCount == 0) {
+        goto fallback;
+    }
+
+    {
+        DISPLAYCONFIG_PATH_INFO* paths = (DISPLAYCONFIG_PATH_INFO*)calloc(pathCount, sizeof(DISPLAYCONFIG_PATH_INFO));
+        DISPLAYCONFIG_MODE_INFO* modes = (DISPLAYCONFIG_MODE_INFO*)calloc(modeCount, sizeof(DISPLAYCONFIG_MODE_INFO));
+        if (!paths || !modes) {
+            free(paths);
+            free(modes);
+            goto fallback;
+        }
+
+        if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths, &modeCount, modes, NULL) != ERROR_SUCCESS) {
+            free(paths);
+            free(modes);
+            goto fallback;
+        }
+
+        for (UINT32 i = 0; i < pathCount; i++) {
+            DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName;
+            sourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+            sourceName.header.size = sizeof(sourceName);
+            sourceName.header.adapterId = paths[i].sourceInfo.adapterId;
+            sourceName.header.id = paths[i].sourceInfo.id;
+
+            if (DisplayConfigGetDeviceInfo(&sourceName.header) != ERROR_SUCCESS) {
+                continue;
+            }
+
+            if (wcscmp(sourceName.viewGdiDeviceName, monInfo->szDevice) == 0) {
+                // Found matching path - compute hash from adapter ID + target ID
+                char buf[128];
+                int len = sprintf(buf, "%lu/%li/%u",
+                    (unsigned long)paths[i].targetInfo.adapterId.LowPart,
+                    (long)paths[i].targetInfo.adapterId.HighPart,
+                    (unsigned int)paths[i].targetInfo.id);
+
+                uint32_t hash = SuperFastHash_(buf, len);
+                free(paths);
+                free(modes);
+                return (int64_t)hash;
+            }
+        }
+
+        free(paths);
+        free(modes);
+    }
+
+fallback:
+    {
+        // Fallback: hash the GDI device name (converted to UTF-8)
+        char deviceNameUtf8[256];
+        int utf8Len = WideCharToMultiByte(CP_UTF8, 0, monInfo->szDevice, -1,
+                                          deviceNameUtf8, sizeof(deviceNameUtf8), NULL, NULL);
+        if (utf8Len > 1) {
+            // utf8Len includes null terminator; hash without it
+            return (int64_t)SuperFastHash_(deviceNameUtf8, utf8Len - 1);
+        }
+        return 0;
+    }
+}
 
 // Get monitor real physical size (bypassing DPI virtualization)
 // Reference: screenshot library's getMonitorRealSize implementation
@@ -112,15 +189,16 @@ static BOOL CALLBACK MonitorInfoEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRE
     RECT physRect;
     int hasPhysical = getMonitorRealSize(hMonitor, &physRect);
 
-    // Get monitor info (to check if main display)
-    MONITORINFO mi = {0};
+    // Get monitor info (to check if main display and get device name for electron ID)
+    MONITORINFOEXW mi = {0};
     mi.cbSize = sizeof(mi);
-    GetMonitorInfoW(hMonitor, &mi);
+    GetMonitorInfoW(hMonitor, (MONITORINFO*)&mi);
 
     DisplayInfoC* info = &ctx->displays[ctx->currentIndex];
     info->handle = (uintptr)hMonitor;
     info->index = ctx->currentIndex;
     info->isMain = (mi.dwFlags & MONITORINFOF_PRIMARY) ? 1 : 0;
+    info->electronId = computeElectronDisplayId(&mi);
 
     // Always store virtual (logical) coordinates
     info->vx = lprcMonitor->left;
