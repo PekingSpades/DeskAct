@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>DeskAct - Electron Display Info</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: #0f172a; color: #e2e8f0;
+    padding: 24px; overflow-y: auto;
+  }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; color: #f8fafc; }
+  .meta { font-size: 12px; color: #94a3b8; margin-bottom: 20px; }
+  .meta span { margin-right: 16px; }
+  .grid { display: flex; flex-direction: column; gap: 16px; }
+  .card {
+    background: #1e293b; border: 1px solid #334155; border-radius: 10px;
+    padding: 16px; position: relative;
+  }
+  .card.primary { border-color: #3b82f6; }
+  .card-header {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 12px; font-size: 15px; font-weight: 600; color: #f1f5f9;
+  }
+  .badge {
+    font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .badge-primary { background: #1d4ed8; color: #dbeafe; }
+  .badge-id { background: #334155; color: #cbd5e1; font-family: monospace; font-size: 11px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td { padding: 3px 0; vertical-align: top; }
+  td:first-child { color: #94a3b8; width: 110px; white-space: nowrap; }
+  td:last-child { color: #e2e8f0; font-family: "Cascadia Code", "Fira Code", monospace; }
+</style>
+</head>
+<body>
+  <h1>Electron Display Info</h1>
+  <div class="meta" id="meta"></div>
+  <div class="grid" id="grid"></div>
+
+<script>
+  const { ipcRenderer } = require("electron");
+
+  function rect(r) {
+    return `{ x: ${r.x}, y: ${r.y}, w: ${r.width}, h: ${r.height} }`;
+  }
+
+  function size(s) {
+    return `${s.width} × ${s.height}`;
+  }
+
+  async function init() {
+    const data = await ipcRenderer.invoke("get-display-data");
+
+    document.getElementById("meta").innerHTML =
+      `<span>Electron ${data.electron}</span>` +
+      `<span>Chromium ${data.chrome}</span>` +
+      `<span>${data.platform}/${data.arch}</span>` +
+      `<span>Displays: ${data.displays.length}</span>`;
+
+    const grid = document.getElementById("grid");
+
+    for (const d of data.displays) {
+      const card = document.createElement("div");
+      card.className = "card" + (d.isPrimary ? " primary" : "");
+
+      const rows = [
+        ["ID", d.id],
+        ["Bounds", rect(d.bounds)],
+        ["Size", size(d.size)],
+        ["Work Area", rect(d.workArea)],
+        ["Scale", d.scaleFactor + "x"],
+        ["Rotation", d.rotation + "°"],
+        ["Color Depth", d.colorDepth + " bit"],
+        ["Internal", d.internal],
+      ];
+
+      card.innerHTML =
+        `<div class="card-header">` +
+          `<span>${d.label}</span>` +
+          `<span class="badge badge-id">#${d.id}</span>` +
+          (d.isPrimary ? `<span class="badge badge-primary">Primary</span>` : "") +
+        `</div>` +
+        `<table>` +
+        rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("") +
+        `</table>`;
+
+      grid.appendChild(card);
+    }
+  }
+
+  init();
+</script>
+</body>
+</html>

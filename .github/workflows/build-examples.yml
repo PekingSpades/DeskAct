@@ -1,0 +1,166 @@
+name: Build Examples
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - goos: darwin
+            goarch: amd64
+            runner: macos-15-intel
+          - goos: darwin
+            goarch: arm64
+            runner: macos-15
+          - goos: windows
+            goarch: amd64
+            runner: windows-latest
+          - goos: linux
+            goarch: amd64
+            runner: ubuntu-latest
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+
+      - name: Install Linux dependencies
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libx11-dev \
+            libxtst-dev \
+            libxinerama-dev \
+            libxrandr-dev \
+            libpng-dev \
+            xclip \
+            xsel
+
+      - name: Build examples
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 1
+          CGO_LDFLAGS_ALLOW: "-weak_framework|ScreenCaptureKit"
+          CGO_CFLAGS: ${{ matrix.goos == 'darwin' && '-mmacosx-version-min=11.0' || '' }}
+          CGO_LDFLAGS: ${{ matrix.goos == 'darwin' && '-mmacosx-version-min=11.0' || '' }}
+        run: |
+          suffix=""
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            suffix=".exe"
+          fi
+          go build -a -v -o "capture-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/capture
+          go build -a -v -o "display-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/display
+          go build -a -v -o "keyboard-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/keyboard
+          go build -a -v -o "mouse-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/mouse
+          go build -a -v -o "window-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/window
+          go build -a -v -o "apps-${{ matrix.goos }}-${{ matrix.goarch }}${suffix}" ./examples/apps
+
+      - name: Upload artifacts
+        id: upload_github_artifacts
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: examples-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            capture-${{ matrix.goos }}-${{ matrix.goarch }}*
+            display-${{ matrix.goos }}-${{ matrix.goarch }}*
+            keyboard-${{ matrix.goos }}-${{ matrix.goarch }}*
+            mouse-${{ matrix.goos }}-${{ matrix.goarch }}*
+            window-${{ matrix.goos }}-${{ matrix.goarch }}*
+            apps-${{ matrix.goos }}-${{ matrix.goarch }}*
+          retention-days: 7
+
+      - name: Upload artifacts to server
+        shell: bash
+        continue-on-error: true
+        env:
+          ARTIFACT_SERVER_URL: ${{ secrets.ARTIFACT_SERVER_URL }}
+          ARTIFACT_USER: ${{ secrets.ARTIFACT_SERVER_USER }}
+          ARTIFACT_PASSWORD: ${{ secrets.ARTIFACT_SERVER_PASSWORD }}
+          COMMIT_HASH: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          repo_name="${GITHUB_REPOSITORY##*/}"
+          date_str="$(date -u +%Y-%m-%d)"
+          commit_hash="${COMMIT_HASH}"
+          base_path="/${repo_name}/${date_str}/${commit_hash}/"
+          server_url="${ARTIFACT_SERVER_URL%/}"
+          auth="${ARTIFACT_USER}:${ARTIFACT_PASSWORD}"
+          curl_status() {
+            curl --http1.1 --silent --output /dev/null -w "%{http_code}" "$@"
+          }
+          ensure_dir() {
+            local dir="$1"
+            local url="${server_url}${dir}"
+            local status
+            status=$(curl_status -u "${auth}" "${url}")
+            if [[ "${status}" == 2* ]]; then
+              echo "Dir exists: ${dir}"
+              return 0
+            fi
+            if [[ "${status}" != "404" ]]; then
+              echo "Unexpected status ${status} when checking ${dir}"
+              return 1
+            fi
+            local target="${dir%/}"
+            local parent="${target%/*}/"
+            local name="${target##*/}"
+            echo "Creating dir: ${dir}"
+            status=$(curl_status -u "${auth}" -F "mkdir=${name}" "${server_url}/upload?path=${parent}")
+            if [[ "${status}" != 2* && "${status}" != 3* ]]; then
+              echo "Failed to create ${dir} (HTTP ${status})"
+              return 1
+            fi
+          }
+          ensure_dir "/${repo_name}/"
+          ensure_dir "/${repo_name}/${date_str}/"
+          ensure_dir "/${repo_name}/${date_str}/${commit_hash}/"
+          shopt -s nullglob
+          files=(
+            capture-${{ matrix.goos }}-${{ matrix.goarch }}*
+            display-${{ matrix.goos }}-${{ matrix.goarch }}*
+            keyboard-${{ matrix.goos }}-${{ matrix.goarch }}*
+            mouse-${{ matrix.goos }}-${{ matrix.goarch }}*
+            window-${{ matrix.goos }}-${{ matrix.goarch }}*
+            apps-${{ matrix.goos }}-${{ matrix.goarch }}*
+          )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No artifacts found to upload"
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              relative_path="${repo_name}/${date_str}/${commit_hash}/${filename}"
+              echo "Uploading ${filename}..."
+              for attempt in 1 2 3; do
+                status=$(curl_status --max-time 300 -u "${auth}" -F "file=@${file}" "${server_url}/upload?path=${base_path}")
+                if [[ "${status}" == 2* || "${status}" == 3* ]]; then
+                  echo "${relative_path}"
+                  break
+                else
+                  echo "Attempt ${attempt} failed for ${filename} (HTTP ${status})"
+                  if [ "$attempt" -eq 3 ]; then
+                    echo "Failed to upload ${filename} after 3 attempts"
+                    exit 1
+                  fi
+                  sleep 5
+                fi
+              done
+            fi
+          done
