@@ -22,7 +22,6 @@ typedef struct {
     int32_t x, y;       // Virtual (scaled) coordinates for position
     int32_t w, h;       // Physical pixel size (not virtual)
     double  scale;      // Scale factor (pixel/virtual)
-    int64_t electronId; // Electron/Chromium-compatible display ID
 } DisplayInfoC;
 
 // Get display count
@@ -44,7 +43,6 @@ static DisplayInfoC getDisplayInfoById(CGDirectDisplayID displayID, int32_t inde
     info.handle = (uintptr)displayID;
     info.index = index;
     info.isMain = (displayID == CGMainDisplayID()) ? 1 : 0;
-    info.electronId = (int64_t)displayID;
 
     // Position uses virtual coordinates (for locating display in virtual desktop)
     info.x = (int32_t)bounds.origin.x;

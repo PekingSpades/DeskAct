@@ -12,7 +12,6 @@
 #define DISPLAY_C_WINDOWS_H
 
 #include "../base/types.h"
-#include "superfasthash.h"
 #include <windows.h>
 #include <stdio.h>
 
@@ -56,7 +55,8 @@ typedef struct {
     int32_t vx, vy;     // Virtual (logical) coordinates origin
     int32_t vw, vh;     // Virtual (logical) size
     double  scale;      // Scale factor (physical/logical)
-    int64_t electronId; // Electron/Chromium-compatible display ID
+    char    electronIdHashInput[256]; // Raw string for SuperFastHash (electron ID)
+    int32_t electronIdHashInputLen;  // Length of the hash input string
 } DisplayInfoC;
 
 // EnumDisplayContext is the enumeration context
@@ -68,13 +68,13 @@ typedef struct {
     int32_t       foundCount;    // Found count
 } EnumDisplayContext;
 
-// Compute Electron/Chromium-compatible display ID for a monitor.
+// Get the hash input string for computing Electron/Chromium display ID.
 // Algorithm from chromium/ui/display/win/display_info.cc:71-90:
 // 1. QueryDisplayConfig to get active paths
 // 2. Match GDI device name to find the path
-// 3. Hash "adapterId.LowPart/adapterId.HighPart/targetInfo.id" with SuperFastHash
-// 4. Fallback: hash the device name string
-static int64_t computeElectronDisplayId(MONITORINFOEXW* monInfo) {
+// 3. Output "adapterId.LowPart/adapterId.HighPart/targetInfo.id"
+// 4. Fallback: output UTF-8 device name
+static void getElectronIdHashInput(MONITORINFOEXW* monInfo, char* output, int32_t* outputLen) {
     UINT32 pathCount = 0, modeCount = 0;
     if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) != ERROR_SUCCESS) {
         goto fallback;
@@ -110,17 +110,15 @@ static int64_t computeElectronDisplayId(MONITORINFOEXW* monInfo) {
             }
 
             if (wcscmp(sourceName.viewGdiDeviceName, monInfo->szDevice) == 0) {
-                // Found matching path - compute hash from adapter ID + target ID
-                char buf[128];
-                int len = sprintf(buf, "%lu/%li/%u",
+                // Found matching path - format adapter ID + target ID
+                int len = sprintf(output, "%lu/%li/%u",
                     (unsigned long)paths[i].targetInfo.adapterId.LowPart,
                     (long)paths[i].targetInfo.adapterId.HighPart,
                     (unsigned int)paths[i].targetInfo.id);
-
-                uint32_t hash = SuperFastHash_(buf, len);
+                *outputLen = (int32_t)len;
                 free(paths);
                 free(modes);
-                return (int64_t)hash;
+                return;
             }
         }
 
@@ -130,15 +128,14 @@ static int64_t computeElectronDisplayId(MONITORINFOEXW* monInfo) {
 
 fallback:
     {
-        // Fallback: hash the GDI device name (converted to UTF-8)
-        char deviceNameUtf8[256];
+        // Fallback: convert GDI device name to UTF-8
         int utf8Len = WideCharToMultiByte(CP_UTF8, 0, monInfo->szDevice, -1,
-                                          deviceNameUtf8, sizeof(deviceNameUtf8), NULL, NULL);
+                                          output, 256, NULL, NULL);
         if (utf8Len > 1) {
-            // utf8Len includes null terminator; hash without it
-            return (int64_t)SuperFastHash_(deviceNameUtf8, utf8Len - 1);
+            *outputLen = (int32_t)(utf8Len - 1); // exclude null terminator
+        } else {
+            *outputLen = 0;
         }
-        return 0;
     }
 }
 
@@ -198,7 +195,7 @@ static BOOL CALLBACK MonitorInfoEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRE
     info->handle = (uintptr)hMonitor;
     info->index = ctx->currentIndex;
     info->isMain = (mi.dwFlags & MONITORINFOF_PRIMARY) ? 1 : 0;
-    info->electronId = computeElectronDisplayId(&mi);
+    getElectronIdHashInput(&mi, info->electronIdHashInput, &info->electronIdHashInputLen);
 
     // Always store virtual (logical) coordinates
     info->vx = lprcMonitor->left;
