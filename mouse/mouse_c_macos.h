@@ -61,6 +61,9 @@ void calculateDeltas(CGEventRef *event, MMPointInt32 point) {
 	CFRelease(get);
 }
 
+/* Forward declaration for location() used below. */
+MMPointInt32 location();
+
 /* Poll until the system reports the cursor at the expected position,
    or until maxWaitMs milliseconds have elapsed. */
 static void waitForCursorSync(MMPointInt32 target, double maxWaitMs) {
