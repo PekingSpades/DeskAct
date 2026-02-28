@@ -62,12 +62,12 @@ func Move(x, y int, settings MouseSettings) error {
 	return m.Move(x, y, settings)
 }
 
-func Drag(x, y int, button MouseButton, settings MouseSettings) error {
-	return m.Drag(x, y, button, settings)
+func Drag(fromX, fromY, toX, toY int, button MouseButton, settings MouseSettings) error {
+	return m.Drag(fromX, fromY, toX, toY, button, settings)
 }
 
-func DragSmooth(x, y int, button MouseButton, settings MouseSettings) error {
-	return m.DragSmooth(x, y, button, settings)
+func DragSmooth(fromX, fromY, toX, toY int, button MouseButton, settings MouseSettings) error {
+	return m.DragSmooth(fromX, fromY, toX, toY, button, settings)
 }
 
 func MoveSmooth(x, y int, settings MouseSettings) error {

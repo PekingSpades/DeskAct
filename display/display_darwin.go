@@ -173,20 +173,6 @@ func (d *Display) MoveSmooth(physX, physY int, settings MouseSettings) error {
 	return mouse.MoveSmooth(virtAbsX, virtAbsY, settings)
 }
 
-// Drag drags the mouse from one position to another on this display.
-func (d *Display) Drag(fromX, fromY, toX, toY int, button MouseButton, settings MouseSettings) error {
-	if err := d.Move(fromX, fromY, settings); err != nil {
-		return err
-	}
-	return d.DragTo(toX, toY, button, settings)
-}
-
-// DragTo drags the mouse from the current position to the specified position on this display.
-func (d *Display) DragTo(physX, physY int, button MouseButton, settings MouseSettings) error {
-	virtAbsX, virtAbsY := d.ToAbsolute(physX, physY)
-	return mouse.DragSmooth(virtAbsX, virtAbsY, button, settings)
-}
-
 // CaptureRect captures a rectangular region of this display.
 func (d *Display) CaptureRect(physX, physY, w, h int, options CaptureOptions) (*image.RGBA, error) {
 	virtAbsX, virtAbsY := d.ToAbsolute(physX, physY)

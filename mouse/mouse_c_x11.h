@@ -113,8 +113,8 @@ static double crude_hypot(double x, double y){
 	return ((M_SQRT2 - 1.0) * small) + big;
 }
 
-bool smoothlyMoveMouse(MMPointInt32 endPoint, double lowSpeed, double highSpeed){
-	MMPointInt32 pos = location();
+bool smoothlyMoveMouse(MMPointInt32 startPoint, MMPointInt32 endPoint, double lowSpeed, double highSpeed){
+	MMPointInt32 pos = startPoint;
 	// MMSizeInt32 screenSize = getMainDisplaySize();
 	double velo_x = 0.0, velo_y = 0.0;
 	double distance;

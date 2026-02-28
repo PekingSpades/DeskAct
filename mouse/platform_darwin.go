@@ -7,7 +7,7 @@ package mouse
 #include "mouse.h"
 
 void dragMouse(MMPointInt32 point, const MMMouseButton button);
-bool smoothlyDragMouse(MMPointInt32 endPoint, const MMMouseButton button, double lowSpeed, double highSpeed);
+bool smoothlyDragMouse(MMPointInt32 startPoint, MMPointInt32 endPoint, const MMMouseButton button, double lowSpeed, double highSpeed);
 */
 import "C"
 
@@ -33,29 +33,30 @@ func mouseButtonToC(button MouseButton) (C.MMMouseButton, error) {
 	return 0, ErrMouseInvalidButton
 }
 
-func dragTo(x, y int, button MouseButton, settings MouseSettings) error {
+func dragTo(fromX, fromY, toX, toY int, button MouseButton, settings MouseSettings) error {
 	cbtn, err := mouseButtonToC(button)
 	if err != nil {
 		return wrapMouseError(MouseOpDrag, err, button, 0, 0, "", 0)
 	}
-	cx := C.int32_t(x)
-	cy := C.int32_t(y)
+	cx := C.int32_t(toX)
+	cy := C.int32_t(toY)
 	C.dragMouse(C.MMPointInt32Make(cx, cy), cbtn)
 	MilliSleep(settings.Sleep)
 	return nil
 }
 
-func dragSmoothTo(x, y int, button MouseButton, settings MouseSettings) error {
+func dragSmoothTo(fromX, fromY, toX, toY int, button MouseButton, settings MouseSettings) error {
 	cbtn, err := mouseButtonToC(button)
 	if err != nil {
 		return wrapMouseError(MouseOpDrag, err, button, 0, 0, "", 0)
 	}
-	cx := C.int32_t(x)
-	cy := C.int32_t(y)
+	cx := C.int32_t(toX)
+	cy := C.int32_t(toY)
+	startPt := C.MMPointInt32Make(C.int32_t(fromX), C.int32_t(fromY))
 	low := C.double(settings.MoveSmoothLow)
 	high := C.double(settings.MoveSmoothHigh)
 
-	cbool := C.smoothlyDragMouse(C.MMPointInt32Make(cx, cy), cbtn, low, high)
+	cbool := C.smoothlyDragMouse(startPt, C.MMPointInt32Make(cx, cy), cbtn, low, high)
 	MilliSleep(settings.Sleep + settings.MoveSmoothDelay)
 	if !bool(cbool) {
 		return wrapMouseError(MouseOpDrag, ErrMouseActionFailed, button, 0, 0, "smooth drag returned false", 0)

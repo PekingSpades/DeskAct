@@ -61,6 +61,21 @@ void calculateDeltas(CGEventRef *event, MMPointInt32 point) {
 	CFRelease(get);
 }
 
+/* Poll until the system reports the cursor at the expected position,
+   or until maxWaitMs milliseconds have elapsed. */
+static void waitForCursorSync(MMPointInt32 target, double maxWaitMs) {
+	const double pollIntervalMs = 1.0;
+	double elapsed = 0.0;
+	while (elapsed < maxWaitMs) {
+		MMPointInt32 cur = location();
+		if (cur.x == target.x && cur.y == target.y) {
+			return;
+		}
+		microsleep(pollIntervalMs);
+		elapsed += pollIntervalMs;
+	}
+}
+
 /* Move the mouse to a specific point. */
 void moveMouse(MMPointInt32 point){
 	CGEventSourceRef source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
@@ -72,6 +87,8 @@ void moveMouse(MMPointInt32 point){
 	CGEventPost(kCGHIDEventTap, move);
 	CFRelease(move);
 	CFRelease(source);
+
+	waitForCursorSync(point, 50.0);
 }
 
 void dragMouse(MMPointInt32 point, const MMMouseButton button){
@@ -85,6 +102,8 @@ void dragMouse(MMPointInt32 point, const MMMouseButton button){
 	CGEventPost(kCGHIDEventTap, drag);
 	CFRelease(drag);
 	CFRelease(source);
+
+	waitForCursorSync(point, 50.0);
 }
 
 MMPointInt32 location() {
@@ -192,8 +211,8 @@ static double crude_hypot(double x, double y){
 	return ((M_SQRT2 - 1.0) * small) + big;
 }
 
-bool smoothlyMoveMouse(MMPointInt32 endPoint, double lowSpeed, double highSpeed){
-	MMPointInt32 pos = location();
+bool smoothlyMoveMouse(MMPointInt32 startPoint, MMPointInt32 endPoint, double lowSpeed, double highSpeed){
+	MMPointInt32 pos = startPoint;
 	// MMSizeInt32 screenSize = getMainDisplaySize();
 	double velo_x = 0.0, velo_y = 0.0;
 	double distance;
@@ -227,8 +246,8 @@ bool smoothlyMoveMouse(MMPointInt32 endPoint, double lowSpeed, double highSpeed)
 	return true;
 }
 
-bool smoothlyDragMouse(MMPointInt32 endPoint, const MMMouseButton button, double lowSpeed, double highSpeed){
-	MMPointInt32 pos = location();
+bool smoothlyDragMouse(MMPointInt32 startPoint, MMPointInt32 endPoint, const MMMouseButton button, double lowSpeed, double highSpeed){
+	MMPointInt32 pos = startPoint;
 	double velo_x = 0.0, velo_y = 0.0;
 	double distance;
 

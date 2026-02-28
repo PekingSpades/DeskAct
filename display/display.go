@@ -1,5 +1,7 @@
 package display
 
+import "github.com/PekingSpades/DeskAct/mouse"
+
 // PlatformInfo is an interface for platform-specific display information.
 type PlatformInfo interface {
 	// Platform returns the platform name (e.g., "windows", "darwin", "linux").
@@ -93,14 +95,26 @@ func (d *Display) Info() DisplayInfo {
 	}
 }
 
+// Drag drags the mouse from one position to another on this display.
+func (d *Display) Drag(fromX, fromY, toX, toY int, button MouseButton, settings MouseSettings) error {
+	fromAbsX, fromAbsY := d.ToAbsolute(fromX, fromY)
+	toAbsX, toAbsY := d.ToAbsolute(toX, toY)
+	return mouse.DragSmooth(fromAbsX, fromAbsY, toAbsX, toAbsY, button, settings)
+}
+
+// DragTo drags the mouse from the current position to the specified position on this display.
+func (d *Display) DragTo(x, y int, button MouseButton, settings MouseSettings) error {
+	curX, curY := mouse.Location()
+	toAbsX, toAbsY := d.ToAbsolute(x, y)
+	return mouse.DragSmooth(curX, curY, toAbsX, toAbsY, button, settings)
+}
+
 // Platform-specific methods:
 // - ToAbsolute(x, y int) (absX, absY int)
 // - ToRelative(absX, absY int) (x, y int, ok bool)
 // - Contains(absX, absY int) bool
 // - Move(x, y int, settings MouseSettings) error
 // - MoveSmooth(x, y int, settings MouseSettings) error
-// - Drag(fromX, fromY, toX, toY int, button MouseButton, settings MouseSettings) error
-// - DragTo(x, y int, button MouseButton, settings MouseSettings) error
 // - CaptureRect(x, y, w, h int, options CaptureOptions) (*image.RGBA, error)
 // - MouseLocation() (x, y int, ok bool)
 // - ContainsMouse() bool

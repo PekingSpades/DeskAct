@@ -34,18 +34,18 @@ func mouseButtonToC(button MouseButton) (C.MMMouseButton, error) {
 	return 0, ErrMouseInvalidButton
 }
 
-func dragTo(x, y int, button MouseButton, settings MouseSettings) error {
+func dragTo(fromX, fromY, toX, toY int, button MouseButton, settings MouseSettings) error {
 	if _, err := mouseButtonToC(button); err != nil {
 		return wrapMouseError(MouseOpDrag, err, button, 0, 0, "", 0)
 	}
-	return Move(x, y, settings)
+	return Move(toX, toY, settings)
 }
 
-func dragSmoothTo(x, y int, button MouseButton, settings MouseSettings) error {
+func dragSmoothTo(fromX, fromY, toX, toY int, button MouseButton, settings MouseSettings) error {
 	if _, err := mouseButtonToC(button); err != nil {
 		return wrapMouseError(MouseOpDrag, err, button, 0, 0, "", 0)
 	}
-	return MoveSmooth(x, y, settings)
+	return MoveSmooth(toX, toY, settings)
 }
 
 func scrollDeltaToC(delta ScrollDelta) (C.int, C.int, C.MMScrollUnit, error) {

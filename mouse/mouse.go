@@ -15,46 +15,50 @@ func Move(x, y int, settings MouseSettings) error {
 	return nil
 }
 
-// Drag drags the mouse to (x, y) from the current position.
-func Drag(x, y int, button MouseButton, settings MouseSettings) error {
-	if err := Toggle(button, true, false, settings); err != nil {
-		return err
-	}
-	MilliSleep(50)
-	if err := dragTo(x, y, button, settings); err != nil {
-		_ = Toggle(button, false, false, settings)
-		return err
-	}
-	return Toggle(button, false, false, settings)
-}
-
-// DragSmooth drags the mouse smoothly to (x, y) from the current position.
-func DragSmooth(x, y int, button MouseButton, settings MouseSettings) error {
-	if err := Toggle(button, true, false, settings); err != nil {
-		return err
-	}
-	MilliSleep(50)
-	if err := dragSmoothTo(x, y, button, settings); err != nil {
-		_ = Toggle(button, false, false, settings)
-		return err
-	}
-	return Toggle(button, false, false, settings)
-}
-
 // MoveSmooth smoothly moves the mouse to (x, y).
 func MoveSmooth(x, y int, settings MouseSettings) error {
+	sx, sy := Location()
 	cx := C.int32_t(x)
 	cy := C.int32_t(y)
 
+	startPt := C.MMPointInt32Make(C.int32_t(sx), C.int32_t(sy))
 	low := C.double(settings.MoveSmoothLow)
 	high := C.double(settings.MoveSmoothHigh)
 
-	cbool := C.smoothlyMoveMouse(C.MMPointInt32Make(cx, cy), low, high)
+	cbool := C.smoothlyMoveMouse(startPt, C.MMPointInt32Make(cx, cy), low, high)
 	MilliSleep(settings.Sleep + settings.MoveSmoothDelay)
 	if !bool(cbool) {
 		return wrapMouseError(MouseOpMoveSmooth, ErrMouseActionFailed, 0, 0, 0, "smooth move returned false", 0)
 	}
 	return nil
+}
+
+// Drag drags the mouse to (toX, toY) from (fromX, fromY).
+func Drag(fromX, fromY, toX, toY int, button MouseButton, settings MouseSettings) error {
+	Move(fromX, fromY, settings)
+	if err := Toggle(button, true, false, settings); err != nil {
+		return err
+	}
+	MilliSleep(50)
+	if err := dragTo(fromX, fromY, toX, toY, button, settings); err != nil {
+		_ = Toggle(button, false, false, settings)
+		return err
+	}
+	return Toggle(button, false, false, settings)
+}
+
+// DragSmooth drags the mouse smoothly to (toX, toY) from (fromX, fromY).
+func DragSmooth(fromX, fromY, toX, toY int, button MouseButton, settings MouseSettings) error {
+	Move(fromX, fromY, settings)
+	if err := Toggle(button, true, false, settings); err != nil {
+		return err
+	}
+	MilliSleep(50)
+	if err := dragSmoothTo(fromX, fromY, toX, toY, button, settings); err != nil {
+		_ = Toggle(button, false, false, settings)
+		return err
+	}
+	return Toggle(button, false, false, settings)
 }
 
 // MoveArgs get the mouse relative args.
