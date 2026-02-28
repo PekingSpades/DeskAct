@@ -44,6 +44,7 @@ jobs:
             libx11-dev \
             libxtst-dev \
             libxinerama-dev \
+            libxrandr-dev \
             libpng-dev \
             xclip \
             xsel

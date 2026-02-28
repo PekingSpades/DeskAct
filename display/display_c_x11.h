@@ -15,8 +15,11 @@
 #include "../base/xdisplay_c.h"
 #include <X11/Xlib.h>
 #include <X11/Xresource.h>
+#include <X11/Xatom.h>
 #include <X11/extensions/Xinerama.h>
+#include <X11/extensions/Xrandr.h>
 #include <stdlib.h>
+#include <string.h>
 
 // DisplayInfoC contains display information in C struct
 typedef struct {
@@ -25,7 +28,114 @@ typedef struct {
     int8_t  isMain;     // Is main display
     int32_t x, y, w, h; // Physical coordinates and size
     double  scale;      // Scale factor (from Xft.dpi)
+    // EDID data for electron ID computation (populated by XRandR)
+    uint16_t edidManufacturerId;
+    char     edidDisplayName[14];
+    int32_t  edidDisplayNameLen;
+    uint32_t edidOutputId;
+    int8_t   edidValid;   // 1 if matched via XRandR, 0 otherwise
 } DisplayInfoC;
+
+// Populate EDID data for electron ID computation using XRandR.
+// Parses EDID for manufacturer_id and display_name, gets output_id,
+// and matches XRandR outputs to Xinerama screens via CRTC geometry.
+// The actual hash and ID computation is done in Go.
+static void populateEdidData(Display* dpy, DisplayInfoC* displays, int32_t count) {
+    int major, minor;
+    if (!XRRQueryVersion(dpy, &major, &minor)) {
+        return;
+    }
+
+    Window root = DefaultRootWindow(dpy);
+    XRRScreenResources* res = XRRGetScreenResourcesCurrent(dpy, root);
+    if (!res) {
+        return;
+    }
+
+    int8_t* matched = (int8_t*)calloc(count, sizeof(int8_t));
+    if (!matched) {
+        XRRFreeScreenResources(res);
+        return;
+    }
+
+    for (int o = 0; o < res->noutput; o++) {
+        XRROutputInfo* outInfo = XRRGetOutputInfo(dpy, res, res->outputs[o]);
+        if (!outInfo) continue;
+
+        if (outInfo->connection != RR_Connected || outInfo->crtc == None) {
+            XRRFreeOutputInfo(outInfo);
+            continue;
+        }
+
+        XRRCrtcInfo* crtcInfo = XRRGetCrtcInfo(dpy, res, outInfo->crtc);
+        if (!crtcInfo) {
+            XRRFreeOutputInfo(outInfo);
+            continue;
+        }
+
+        // Parse EDID
+        uint16_t manufacturer_id = 0;
+        char display_name[14];
+        int display_name_len = 0;
+        memset(display_name, 0, sizeof(display_name));
+
+        Atom edidAtom = XInternAtom(dpy, "EDID", True);
+        if (edidAtom != None) {
+            Atom actualType;
+            int actualFormat;
+            unsigned long nitems, bytesAfter;
+            unsigned char* edid = NULL;
+
+            if (XRRGetOutputProperty(dpy, res->outputs[o], edidAtom,
+                    0, 128, False, False, AnyPropertyType,
+                    &actualType, &actualFormat, &nitems, &bytesAfter, &edid) == Success
+                && edid && nitems >= 128) {
+
+                manufacturer_id = ((uint16_t)edid[8] << 8) | (uint16_t)edid[9];
+
+                for (int d = 0; d < 4; d++) {
+                    int offset = 54 + d * 18;
+                    if (offset + 18 > (int)nitems) break;
+                    if (edid[offset] == 0 && edid[offset+1] == 0 &&
+                        edid[offset+2] == 0 && edid[offset+3] == 0xFC) {
+                        for (int k = 0; k < 13; k++) {
+                            char c = (char)edid[offset + 5 + k];
+                            if (c == '\n' || c == '\0') break;
+                            display_name[display_name_len++] = c;
+                        }
+                        break;
+                    }
+                }
+            }
+            if (edid) XFree(edid);
+        }
+
+        uint32_t output_id = (uint32_t)res->outputs[o];
+
+        // Match CRTC geometry to Xinerama screen
+        for (int32_t s = 0; s < count; s++) {
+            if (matched[s]) continue;
+            if ((int)crtcInfo->x == displays[s].x &&
+                (int)crtcInfo->y == displays[s].y &&
+                (int)crtcInfo->width == displays[s].w &&
+                (int)crtcInfo->height == displays[s].h) {
+                displays[s].edidManufacturerId = manufacturer_id;
+                memcpy(displays[s].edidDisplayName, display_name, display_name_len);
+                displays[s].edidDisplayNameLen = (int32_t)display_name_len;
+                displays[s].edidOutputId = output_id;
+                displays[s].edidValid = 1;
+                matched[s] = 1;
+                break;
+            }
+        }
+
+        XRRFreeCrtcInfo(crtcInfo);
+        XRRFreeOutputInfo(outInfo);
+    }
+
+    free(matched);
+    XRRFreeScreenResources(res);
+}
 
 // Get scale factor from Xft.dpi
 static double getX11Scale() {
@@ -125,6 +235,7 @@ static int32_t getAllDisplays(DisplayInfoC* displays, int32_t maxCount) {
             }
 
             XFree(screens);
+            populateEdidData(dpy, displays, resultCount);
             XCloseDisplay(dpy);
             return resultCount;
         }

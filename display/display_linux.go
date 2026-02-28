@@ -5,7 +5,7 @@ package display
 
 /*
 #cgo linux CFLAGS: -I/usr/src
-#cgo linux LDFLAGS: -L/usr/src -lm -lX11 -lXtst -lXinerama
+#cgo linux LDFLAGS: -L/usr/src -lm -lX11 -lXtst -lXinerama -lXrandr
 
 #include "display_c.h"
 */
@@ -13,23 +13,53 @@ import "C"
 
 import (
 	"image"
+	"unsafe"
 
 	"github.com/PekingSpades/DeskAct/mouse"
 	"github.com/PekingSpades/DeskAct/screenshot"
 )
+
+// linuxElectronId computes the Electron display ID from EDID data.
+// Algorithm: (manufacturer_id << 40) | (SuperFastHash(display_name) << 8) | (output_id & 0xFF)
+// If output_id > 0xFF, returns 0. If edidValid is false, returns fallback index.
+func linuxElectronId(info *C.DisplayInfoC, fallbackIndex int) int64 {
+	if info.edidValid == 0 {
+		return int64(fallbackIndex)
+	}
+
+	outputId := uint32(info.edidOutputId)
+	if outputId > 0xFF {
+		return 0
+	}
+
+	manufacturerId := uint64(info.edidManufacturerId)
+	nameLen := int(info.edidDisplayNameLen)
+	var productCodeHash uint32
+	if nameLen > 0 {
+		name := C.GoBytes(unsafe.Pointer(&info.edidDisplayName[0]), C.int(nameLen))
+		productCodeHash = SuperFastHash(name)
+	}
+
+	displayId := int64((manufacturerId << 40) | (uint64(productCodeHash) << 8) | uint64(outputId&0xFF))
+	if displayId == 0 {
+		return int64(fallbackIndex)
+	}
+	return displayId
+}
 
 // MainDisplay returns the main display.
 func MainDisplay(options DisplayOptions) *Display {
 	info := C.getMainDisplay()
 	physW, physH := int(info.w), int(info.h)
 	return &Display{
-		id:       int(info.handle),
-		index:    int(info.index),
-		isMain:   info.isMain != 0,
-		origin:   Rect{Point: Point{X: int(info.x), Y: int(info.y)}, Size: Size{W: physW, H: physH}},
-		size:     Size{W: physW, H: physH},
-		scale:    float64(info.scale),
-		dpiAware: options.DPIAware,
+		id:         int(info.handle),
+		electronId: linuxElectronId(&info, int(info.index)),
+		index:      int(info.index),
+		isMain:     info.isMain != 0,
+		origin:     Rect{Point: Point{X: int(info.x), Y: int(info.y)}, Size: Size{W: physW, H: physH}},
+		size:       Size{W: physW, H: physH},
+		scale:      float64(info.scale),
+		dpiAware:   options.DPIAware,
 	}
 }
 
@@ -48,13 +78,14 @@ func AllDisplays(options DisplayOptions) []*Display {
 		info := cDisplays[i]
 		physW, physH := int(info.w), int(info.h)
 		displays[i] = &Display{
-			id:       int(info.handle),
-			index:    int(info.index),
-			isMain:   info.isMain != 0,
-			origin:   Rect{Point: Point{X: int(info.x), Y: int(info.y)}, Size: Size{W: physW, H: physH}},
-			size:     Size{W: physW, H: physH},
-			scale:    float64(info.scale),
-			dpiAware: options.DPIAware,
+			id:         int(info.handle),
+			electronId: linuxElectronId(&cDisplays[i], i),
+			index:      int(info.index),
+			isMain:     info.isMain != 0,
+			origin:     Rect{Point: Point{X: int(info.x), Y: int(info.y)}, Size: Size{W: physW, H: physH}},
+			size:       Size{W: physW, H: physH},
+			scale:      float64(info.scale),
+			dpiAware:   options.DPIAware,
 		}
 	}
 
@@ -75,13 +106,14 @@ func DisplayAt(index int, options DisplayOptions) *Display {
 
 	physW, physH := int(info.w), int(info.h)
 	return &Display{
-		id:       int(info.handle),
-		index:    int(info.index),
-		isMain:   info.isMain != 0,
-		origin:   Rect{Point: Point{X: int(info.x), Y: int(info.y)}, Size: Size{W: physW, H: physH}},
-		size:     Size{W: physW, H: physH},
-		scale:    float64(info.scale),
-		dpiAware: options.DPIAware,
+		id:         int(info.handle),
+		electronId: linuxElectronId(&info, index),
+		index:      int(info.index),
+		isMain:     info.isMain != 0,
+		origin:     Rect{Point: Point{X: int(info.x), Y: int(info.y)}, Size: Size{W: physW, H: physH}},
+		size:       Size{W: physW, H: physH},
+		scale:      float64(info.scale),
+		dpiAware:   options.DPIAware,
 	}
 }
 

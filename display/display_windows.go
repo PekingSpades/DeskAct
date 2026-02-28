@@ -13,10 +13,21 @@ import "C"
 import (
 	"errors"
 	"image"
+	"unsafe"
 
 	"github.com/PekingSpades/DeskAct/mouse"
 	"github.com/PekingSpades/DeskAct/screenshot"
 )
+
+// windowsElectronId computes the Electron display ID from the C hash input.
+func windowsElectronId(info *C.DisplayInfoC) int64 {
+	inputLen := int(info.electronIdHashInputLen)
+	if inputLen <= 0 {
+		return 0
+	}
+	input := C.GoBytes(unsafe.Pointer(&info.electronIdHashInput[0]), C.int(inputLen))
+	return int64(SuperFastHash(input))
+}
 
 // WindowsPlatformInfo contains Windows-specific display information.
 type WindowsPlatformInfo struct {
@@ -65,13 +76,14 @@ func MainDisplay(options DisplayOptions) *Display {
 	}
 
 	return &Display{
-		id:       int(info.handle),
-		index:    int(info.index),
-		isMain:   info.isMain != 0,
-		origin:   origin,
-		size:     Size{W: physW, H: physH},
-		scale:    scale,
-		dpiAware: dpiAware,
+		id:         int(info.handle),
+		electronId: windowsElectronId(&info),
+		index:      int(info.index),
+		isMain:     info.isMain != 0,
+		origin:     origin,
+		size:       Size{W: physW, H: physH},
+		scale:      scale,
+		dpiAware:   dpiAware,
 		platform: &WindowsPlatformInfo{
 			PhysicalOrigin: physicalOrigin,
 		},
@@ -121,13 +133,14 @@ func AllDisplays(options DisplayOptions) []*Display {
 		}
 
 		displays[i] = &Display{
-			id:       int(info.handle),
-			index:    int(info.index),
-			isMain:   info.isMain != 0,
-			origin:   origin,
-			size:     Size{W: physW, H: physH},
-			scale:    scale,
-			dpiAware: dpiAware,
+			id:         int(info.handle),
+			electronId: windowsElectronId(&cDisplays[i]),
+			index:      int(info.index),
+			isMain:     info.isMain != 0,
+			origin:     origin,
+			size:       Size{W: physW, H: physH},
+			scale:      scale,
+			dpiAware:   dpiAware,
 			platform: &WindowsPlatformInfo{
 				PhysicalOrigin: physicalOrigin,
 			},
@@ -179,13 +192,14 @@ func DisplayAt(index int, options DisplayOptions) *Display {
 	}
 
 	return &Display{
-		id:       int(info.handle),
-		index:    int(info.index),
-		isMain:   info.isMain != 0,
-		origin:   origin,
-		size:     Size{W: physW, H: physH},
-		scale:    scale,
-		dpiAware: dpiAware,
+		id:         int(info.handle),
+		electronId: windowsElectronId(&info),
+		index:      int(info.index),
+		isMain:     info.isMain != 0,
+		origin:     origin,
+		size:       Size{W: physW, H: physH},
+		scale:      scale,
+		dpiAware:   dpiAware,
 		platform: &WindowsPlatformInfo{
 			PhysicalOrigin: physicalOrigin,
 		},
