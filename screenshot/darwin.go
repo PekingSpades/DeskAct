@@ -40,19 +40,19 @@ static CaptureResult captureWithCGDisplay(CGDirectDisplayID id, CGRect diInterse
     return result;
 }
 
-static CaptureResult captureWithScreenCaptureKit(CGDirectDisplayID id,
-                                                 CGRect diIntersectDisplayLocal,
-                                                 CGColorSpaceRef colorSpace,
-                                                 const uint64_t* excludedWindowIDs,
-                                                 size_t excludedWindowCount) {
-    CaptureResult result = {0};
 #if defined(HAS_SCREENCAPTUREKIT)
-    if (@available(macOS 14.4, *)) {
-    } else {
-        result.status = CaptureStatusBackendUnavailable;
-        return result;
-    }
+static CaptureResult captureWithScreenCaptureKitAvailable(CGDirectDisplayID id,
+                                                          CGRect diIntersectDisplayLocal,
+                                                          CGColorSpaceRef colorSpace,
+                                                          const uint64_t* excludedWindowIDs,
+                                                          size_t excludedWindowCount) API_AVAILABLE(macos(14.4));
 
+static CaptureResult captureWithScreenCaptureKitAvailable(CGDirectDisplayID id,
+                                                          CGRect diIntersectDisplayLocal,
+                                                          CGColorSpaceRef colorSpace,
+                                                          const uint64_t* excludedWindowIDs,
+                                                          size_t excludedWindowCount) {
+    CaptureResult result = {0};
     dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
     __block CaptureStatus status = CaptureStatusCaptureFailed;
     __block CGImageRef capturedImage = nil;
@@ -118,15 +118,28 @@ static CaptureResult captureWithScreenCaptureKit(CGDirectDisplayID id,
     result.image = capturedImage;
     result.status = status;
     return result;
+}
+#endif
+
+static CaptureResult captureWithScreenCaptureKit(CGDirectDisplayID id,
+                                                 CGRect diIntersectDisplayLocal,
+                                                 CGColorSpaceRef colorSpace,
+                                                 const uint64_t* excludedWindowIDs,
+                                                 size_t excludedWindowCount) {
+    CaptureResult result = {0};
+#if defined(HAS_SCREENCAPTUREKIT)
+    if (@available(macOS 14.4, *)) {
+        return captureWithScreenCaptureKitAvailable(id, diIntersectDisplayLocal, colorSpace, excludedWindowIDs, excludedWindowCount);
+    }
 #else
     (void)id;
     (void)diIntersectDisplayLocal;
     (void)colorSpace;
     (void)excludedWindowIDs;
     (void)excludedWindowCount;
+#endif
     result.status = CaptureStatusBackendUnavailable;
     return result;
-#endif
 }
 */
 import "C"
@@ -247,6 +260,7 @@ func Capture(req cap.Request) (*image.RGBA, error) {
 }
 
 func captureDarwinImage(id C.CGDirectDisplayID, rect C.CGRect, colorSpace C.CGColorSpaceRef, backend cap.CaptureBackend, excludedWindowIDs []C.uint64_t) (C.CGImageRef, error) {
+	var zero C.CGImageRef
 	switch backend {
 	case cap.CaptureBackendScreenCaptureKit:
 		var ptr *C.uint64_t
@@ -259,23 +273,24 @@ func captureDarwinImage(id C.CGDirectDisplayID, rect C.CGRect, colorSpace C.CGCo
 		result := C.captureWithCGDisplay(id, rect, colorSpace)
 		return darwinCaptureResult(result, backend)
 	default:
-		return nil, backendUnavailableError(backend, "backend %q is not supported on macOS", backend)
+		return zero, backendUnavailableError(backend, "backend %q is not supported on macOS", backend)
 	}
 }
 
 func darwinCaptureResult(result C.CaptureResult, backend cap.CaptureBackend) (C.CGImageRef, error) {
+	var zero C.CGImageRef
 	switch result.status {
 	case C.CaptureStatusOK:
 		if unsafe.Pointer(result.image) == nil {
-			return nil, errors.New("cannot capture display")
+			return zero, errors.New("cannot capture display")
 		}
 		return result.image, nil
 	case C.CaptureStatusBackendUnavailable:
-		return nil, backendUnavailableError(backend, "backend %q is unavailable on this macOS version", backend)
+		return zero, backendUnavailableError(backend, "backend %q is unavailable on this macOS version", backend)
 	case C.CaptureStatusWindowExclusionUnsupported:
-		return nil, windowExclusionUnsupportedError(backend)
+		return zero, windowExclusionUnsupportedError(backend)
 	default:
-		return nil, errors.New("cannot capture display")
+		return zero, errors.New("cannot capture display")
 	}
 }
 
