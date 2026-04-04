@@ -6,7 +6,7 @@ import "testing"
 
 func TestDefaultCaptureOptionsOnDarwin(t *testing.T) {
 	options := DefaultCaptureOptions()
-	if options.Backend != CaptureBackendScreenCaptureKit {
-		t.Fatalf("expected default backend %q, got %q", CaptureBackendScreenCaptureKit, options.Backend)
+	if options.Backend != CaptureBackendCGDisplay {
+		t.Fatalf("expected default backend %q, got %q", CaptureBackendCGDisplay, options.Backend)
 	}
 }

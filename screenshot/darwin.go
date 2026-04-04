@@ -157,7 +157,7 @@ func Capture(req cap.Request) (*image.RGBA, error) {
 		return nil, errors.New("width or height should be > 0")
 	}
 
-	backend := normalizeRequestedBackend(req.Options.Backend, cap.CaptureBackendScreenCaptureKit)
+	backend := normalizeRequestedBackend(req.Options.Backend, cap.CaptureBackendCGDisplay)
 	if hasExcludedWindowIDs(req.Options) && backend != cap.CaptureBackendScreenCaptureKit {
 		return nil, windowExclusionUnsupportedError(backend)
 	}
