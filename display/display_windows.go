@@ -15,6 +15,7 @@ import (
 	"image"
 	"unsafe"
 
+	cap "github.com/PekingSpades/DeskAct/capture"
 	"github.com/PekingSpades/DeskAct/mouse"
 	"github.com/PekingSpades/DeskAct/screenshot"
 )
@@ -278,7 +279,14 @@ func (d *Display) CaptureRect(physX, physY, w, h int, options CaptureOptions) (*
 	}
 	absX := pi.PhysicalOrigin.X + physX
 	absY := pi.PhysicalOrigin.Y + physY
-	return screenshot.Capture(absX, absY, w, h, options.WaylandToken)
+	return screenshot.Capture(cap.Request{
+		DisplayID: d.id,
+		X:         absX,
+		Y:         absY,
+		Width:     w,
+		Height:    h,
+		Options:   options,
+	})
 }
 
 // MouseLocation gets the mouse location relative to this display.

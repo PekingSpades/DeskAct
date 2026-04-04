@@ -16,6 +16,7 @@ import "C"
 import (
 	"image"
 
+	cap "github.com/PekingSpades/DeskAct/capture"
 	"github.com/PekingSpades/DeskAct/mouse"
 	"github.com/PekingSpades/DeskAct/screenshot"
 )
@@ -183,7 +184,14 @@ func (d *Display) CaptureRect(physX, physY, w, h int, options CaptureOptions) (*
 		virtW = int(float64(w) / d.scale)
 		virtH = int(float64(h) / d.scale)
 	}
-	return screenshot.Capture(virtAbsX, virtAbsY, virtW, virtH, options.WaylandToken)
+	return screenshot.Capture(cap.Request{
+		DisplayID: d.id,
+		X:         virtAbsX,
+		Y:         virtAbsY,
+		Width:     virtW,
+		Height:    virtH,
+		Options:   options,
+	})
 }
 
 // MouseLocation gets the mouse location in physical pixels relative to this display.

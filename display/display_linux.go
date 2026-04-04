@@ -15,6 +15,7 @@ import (
 	"image"
 	"unsafe"
 
+	cap "github.com/PekingSpades/DeskAct/capture"
 	"github.com/PekingSpades/DeskAct/mouse"
 	"github.com/PekingSpades/DeskAct/screenshot"
 )
@@ -156,7 +157,14 @@ func (d *Display) MoveSmooth(x, y int, settings MouseSettings) error {
 // CaptureRect captures a rectangular region of this display.
 func (d *Display) CaptureRect(x, y, w, h int, options CaptureOptions) (*image.RGBA, error) {
 	absX, absY := d.ToAbsolute(x, y)
-	return screenshot.Capture(absX, absY, w, h, options.WaylandToken)
+	return screenshot.Capture(cap.Request{
+		DisplayID: d.id,
+		X:         absX,
+		Y:         absY,
+		Width:     w,
+		Height:    h,
+		Options:   options,
+	})
 }
 
 // MouseLocation gets the mouse location relative to this display.

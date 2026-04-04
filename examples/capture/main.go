@@ -29,6 +29,10 @@ func main() {
 	fmt.Printf("DPI init result: %s\n", dpiResult)
 	displayOptions := deskact.DefaultDisplayOptions()
 	captureOptions := deskact.DefaultCaptureOptions()
+	backendSelected, backendResult := promptCaptureBackend(captureOptions.Backend)
+	captureOptions.Backend = backendResult
+	fmt.Printf("Capture backend selected: %v\n", backendSelected)
+	fmt.Printf("Capture backend result: %s\n", captureBackendLabel(captureOptions.Backend))
 
 	displays := deskact.AllDisplays(displayOptions)
 	count := len(displays)
@@ -144,6 +148,8 @@ func main() {
 	logBuilder.WriteString(fmt.Sprintf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH))
 	logBuilder.WriteString(fmt.Sprintf("DPI init selected: %v\n", dpiSelected))
 	logBuilder.WriteString(fmt.Sprintf("DPI init result: %s\n", dpiResult))
+	logBuilder.WriteString(fmt.Sprintf("Capture backend selected: %v\n", backendSelected))
+	logBuilder.WriteString(fmt.Sprintf("Capture backend result: %s\n", captureBackendLabel(captureOptions.Backend)))
 	logBuilder.WriteString(fmt.Sprintf("Total displays: %d\n", count))
 	for _, d := range displays {
 		info := d.Info()
@@ -186,6 +192,87 @@ func promptDPIInit() (bool, string) {
 		default:
 			fmt.Println("Please enter 'y' or 'n'.")
 		}
+	}
+}
+
+func promptCaptureBackend(defaultBackend deskact.CaptureBackend) (bool, deskact.CaptureBackend) {
+	reader := bufio.NewReader(os.Stdin)
+	options := availableCaptureBackends()
+	if len(options) == 0 {
+		return false, defaultBackend
+	}
+
+	fmt.Printf("\nSelect capture backend [Enter for %s]:\n", captureBackendLabel(defaultBackend))
+	for _, option := range options {
+		fmt.Printf("  %s) %s\n", option.key, captureBackendLabel(option.backend))
+	}
+
+	for {
+		fmt.Print("Backend: ")
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(strings.ToLower(input))
+		if input == "" {
+			return false, defaultBackend
+		}
+		for _, option := range options {
+			if input == option.key {
+				return true, option.backend
+			}
+		}
+		fmt.Printf("Please press Enter for %s or choose one of: ", captureBackendLabel(defaultBackend))
+		for i, option := range options {
+			if i > 0 {
+				fmt.Print(", ")
+			}
+			fmt.Print(option.key)
+		}
+		fmt.Println()
+	}
+}
+
+func availableCaptureBackends() []struct {
+	key     string
+	backend deskact.CaptureBackend
+} {
+	switch runtime.GOOS {
+	case "windows":
+		return []struct {
+			key     string
+			backend deskact.CaptureBackend
+		}{
+			{key: "d", backend: deskact.CaptureBackendDXGI},
+			{key: "g", backend: deskact.CaptureBackendGDI},
+		}
+	case "darwin":
+		return []struct {
+			key     string
+			backend deskact.CaptureBackend
+		}{
+			{key: "s", backend: deskact.CaptureBackendScreenCaptureKit},
+			{key: "c", backend: deskact.CaptureBackendCGDisplay},
+		}
+	default:
+		return []struct {
+			key     string
+			backend deskact.CaptureBackend
+		}{}
+	}
+}
+
+func captureBackendLabel(backend deskact.CaptureBackend) string {
+	switch backend {
+	case deskact.CaptureBackendDefault:
+		return "default"
+	case deskact.CaptureBackendDXGI:
+		return "dxgi"
+	case deskact.CaptureBackendGDI:
+		return "gdi"
+	case deskact.CaptureBackendScreenCaptureKit:
+		return "screencapturekit"
+	case deskact.CaptureBackendCGDisplay:
+		return "cgdisplay"
+	default:
+		return string(backend)
 	}
 }
 

@@ -2,12 +2,20 @@
 
 package screenshot
 
-import "image"
+import (
+	cap "github.com/PekingSpades/DeskAct/capture"
+	"image"
+)
 
 // Capture returns screen capture of specified desktop region.
 // x and y represent distance from the upper-left corner of primary display.
 // Y-axis is downward direction. This means coordinates system is similar to Windows OS.
-func Capture(x, y, width, height int, waylandToken uint64) (*image.RGBA, error) {
-	_ = waylandToken
+func Capture(req cap.Request) (*image.RGBA, error) {
+	if req.Options.Backend != cap.CaptureBackendDefault {
+		return nil, backendUnavailableError(req.Options.Backend, "backend %q is not supported on this platform", req.Options.Backend)
+	}
+	if hasExcludedWindowIDs(req.Options) {
+		return nil, windowExclusionUnsupportedError(req.Options.Backend)
+	}
 	return nil, errUnsupported()
 }
