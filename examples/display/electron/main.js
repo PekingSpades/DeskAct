@@ -3,6 +3,18 @@ const path = require("path");
 
 app.disableHardwareAcceleration();
 
+function parseOSWindowID(mediaSourceId) {
+  const match = /^window:([^:]+):/.exec(mediaSourceId || "");
+  return match ? match[1] : "";
+}
+
+function formatNativeWindowHandle(buffer) {
+  if (!Buffer.isBuffer(buffer)) {
+    return "";
+  }
+  return "0x" + Buffer.from(buffer).toString("hex");
+}
+
 function getDisplayData() {
   const displays = screen.getAllDisplays();
   const primary = screen.getPrimaryDisplay();
@@ -50,6 +62,33 @@ function printToConsole(displays) {
   }
 }
 
+function getWindowData(win) {
+  const mediaSourceId = win.getMediaSourceId();
+
+  return {
+    title: win.getTitle(),
+    electronWindowID: win.id,
+    mediaSourceId,
+    osWindowID: parseOSWindowID(mediaSourceId),
+    nativeWindowHandleHex: formatNativeWindowHandle(win.getNativeWindowHandle()),
+    contentProtectionEnabled: win.isContentProtected(),
+  };
+}
+
+function printWindowToConsole(win) {
+  const windowData = getWindowData(win);
+
+  console.log("\nSecure window under test");
+  console.log("----------------------------------------");
+  console.log(`  title:               ${windowData.title}`);
+  console.log(`  electronWindowID:    ${windowData.electronWindowID}`);
+  console.log(`  mediaSourceId:       ${windowData.mediaSourceId}`);
+  console.log(`  osWindowID:          ${windowData.osWindowID}`);
+  console.log(`  nativeWindowHandle:  ${windowData.nativeWindowHandleHex}`);
+  console.log(`  contentProtection:   ${windowData.contentProtectionEnabled}`);
+  console.log("----------------------------------------");
+}
+
 app.whenReady().then(() => {
   const displays = getDisplayData();
   printToConsole(displays);
@@ -57,17 +96,22 @@ app.whenReady().then(() => {
   const win = new BrowserWindow({
     width: 720,
     height: 560,
-    title: "DeskAct - Electron Display Info",
+    title: "DeskAct - Secure Electron Display Info",
     webPreferences: {
       contextIsolation: false,
       nodeIntegration: true,
     },
   });
 
+  win.setContentProtection(true);
   win.loadFile(path.join(__dirname, "index.html"));
+  win.webContents.once("did-finish-load", () => {
+    printWindowToConsole(win);
+  });
 
   ipcMain.handle("get-display-data", () => ({
     displays,
+    window: getWindowData(win),
     electron: process.versions.electron,
     chrome: process.versions.chrome,
     platform: process.platform,

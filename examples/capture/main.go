@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 
 	deskact "github.com/PekingSpades/DeskAct"
@@ -33,6 +34,10 @@ func main() {
 	captureOptions.Backend = backendResult
 	fmt.Printf("Capture backend selected: %v\n", backendSelected)
 	fmt.Printf("Capture backend result: %s\n", captureBackendLabel(captureOptions.Backend))
+	if runtime.GOOS == "darwin" {
+		captureOptions.ExcludedWindowIDs = promptExcludedWindowIDs(captureOptions.Backend)
+		fmt.Printf("Excluded window IDs: %s\n", formatExcludedWindowIDs(captureOptions.ExcludedWindowIDs))
+	}
 
 	displays := deskact.AllDisplays(displayOptions)
 	count := len(displays)
@@ -150,6 +155,7 @@ func main() {
 	logBuilder.WriteString(fmt.Sprintf("DPI init result: %s\n", dpiResult))
 	logBuilder.WriteString(fmt.Sprintf("Capture backend selected: %v\n", backendSelected))
 	logBuilder.WriteString(fmt.Sprintf("Capture backend result: %s\n", captureBackendLabel(captureOptions.Backend)))
+	logBuilder.WriteString(fmt.Sprintf("Excluded window IDs: %s\n", formatExcludedWindowIDs(captureOptions.ExcludedWindowIDs)))
 	logBuilder.WriteString(fmt.Sprintf("Total displays: %d\n", count))
 	for _, d := range displays {
 		info := d.Info()
@@ -274,6 +280,60 @@ func captureBackendLabel(backend deskact.CaptureBackend) string {
 	default:
 		return string(backend)
 	}
+}
+
+func promptExcludedWindowIDs(backend deskact.CaptureBackend) []uint64 {
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Printf("\nOptional: enter macOS excluded window IDs [Enter for none].\n")
+		fmt.Printf("Current backend: %s. Window exclusion is supported by %s.\n", captureBackendLabel(backend), captureBackendLabel(deskact.CaptureBackendScreenCaptureKit))
+		fmt.Print("Excluded window IDs: ")
+
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(input)
+		if input == "" {
+			return nil
+		}
+
+		fields := strings.FieldsFunc(input, func(r rune) bool {
+			return r == ',' || r == ' ' || r == '\t'
+		})
+		if len(fields) == 0 {
+			return nil
+		}
+
+		ids := make([]uint64, 0, len(fields))
+		seen := make(map[uint64]struct{}, len(fields))
+		valid := true
+		for _, field := range fields {
+			id, err := strconv.ParseUint(field, 10, 64)
+			if err != nil {
+				fmt.Printf("Invalid window ID %q. Enter decimal uint64 IDs separated by commas or spaces.\n", field)
+				valid = false
+				break
+			}
+			if _, exists := seen[id]; exists {
+				continue
+			}
+			seen[id] = struct{}{}
+			ids = append(ids, id)
+		}
+		if valid {
+			return ids
+		}
+	}
+}
+
+func formatExcludedWindowIDs(ids []uint64) string {
+	if len(ids) == 0 {
+		return "none"
+	}
+
+	parts := make([]string, 0, len(ids))
+	for _, id := range ids {
+		parts = append(parts, strconv.FormatUint(id, 10))
+	}
+	return strings.Join(parts, ", ")
 }
 
 func savePNG(img image.Image, path string) error {

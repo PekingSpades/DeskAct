@@ -14,6 +14,20 @@
   .meta { font-size: 12px; color: #94a3b8; margin-bottom: 20px; }
   .meta span { margin-right: 16px; }
   .grid { display: flex; flex-direction: column; gap: 16px; }
+  .window-card {
+    background: linear-gradient(135deg, #14532d, #0f3d24);
+    border: 1px solid #22c55e;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 18px;
+  }
+  .window-title {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 12px; font-size: 15px; font-weight: 600; color: #ecfdf5;
+  }
+  .window-note {
+    margin-top: 12px; color: #bbf7d0; font-size: 12px; line-height: 1.5;
+  }
   .card {
     background: #1e293b; border: 1px solid #334155; border-radius: 10px;
     padding: 16px; position: relative;
@@ -38,6 +52,7 @@
 <body>
   <h1>Electron Display Info</h1>
   <div class="meta" id="meta"></div>
+  <div class="window-card" id="window-card"></div>
   <div class="grid" id="grid"></div>
 
 <script>
@@ -59,6 +74,24 @@
       `<span>Chromium ${data.chrome}</span>` +
       `<span>${data.platform}/${data.arch}</span>` +
       `<span>Displays: ${data.displays.length}</span>`;
+
+    const windowRows = [
+      ["Electron Window ID", data.window.electronWindowID],
+      ["OS Window ID", data.window.osWindowID || "(unavailable)"],
+      ["Media Source ID", data.window.mediaSourceId || "(unavailable)"],
+      ["Native Handle", data.window.nativeWindowHandleHex || "(unavailable)"],
+      ["Content Protection", data.window.contentProtectionEnabled ? "enabled" : "disabled"],
+    ];
+
+    document.getElementById("window-card").innerHTML =
+      `<div class="window-title">` +
+        `<span>Secure Window Under Test</span>` +
+        `<span class="badge badge-primary">${data.window.contentProtectionEnabled ? "Protected" : "Unprotected"}</span>` +
+      `</div>` +
+      `<table>` +
+      windowRows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("") +
+      `</table>` +
+      `<div class="window-note">Use the OS Window ID to correlate this Electron window with screenshot behavior. On macOS, this is the value to pass into excluded window IDs when testing ScreenCaptureKit exclusion.</div>`;
 
     const grid = document.getElementById("grid");
 
