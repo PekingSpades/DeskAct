@@ -22,9 +22,11 @@ const (
 	dxgiOutputDuplicationAcquireNextFrame        = 8
 	dxgiOutputDuplicationReleaseFrame            = 14
 	d3d11DeviceCreateTexture2DMethod             = 5
-	d3d11DeviceContextMapMethod                  = 10
-	d3d11DeviceContextUnmapMethod                = 11
-	d3d11DeviceContextCopyResourceMethod         = 43
+	// ID3D11DeviceContext inherits ID3D11DeviceChild, so the resource-copy
+	// methods are not near the start of the vtable.
+	d3d11DeviceContextMapMethod                  = 14
+	d3d11DeviceContextUnmapMethod                = 15
+	d3d11DeviceContextCopyResourceMethod         = 47
 	d3d11Texture2DGetDescMethod                  = 10
 	dxgiAcquireFrameTimeoutMillis         uint   = 250
 	d3dDriverTypeUnknown                  uint   = 0
