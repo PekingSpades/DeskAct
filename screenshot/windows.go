@@ -10,6 +10,9 @@ import (
 )
 
 var windowsDXGIManager = newDXGIDuplicationManager(func(displayID int) (dxgiCaptureSession, error) {
+	if err := prepareDXGIThread(); err != nil {
+		return nil, err
+	}
 	return newDXGIDuplicationSession(displayID)
 })
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"runtime"
 	"sync"
 	"time"
 
@@ -47,8 +48,21 @@ type dxgiDuplicationManager struct {
 }
 
 type dxgiDuplicationEntry struct {
-	mu      sync.Mutex
-	session dxgiCaptureSession
+	worker *dxgiDuplicationWorker
+}
+
+type dxgiDuplicationWorker struct {
+	requests chan dxgiCaptureRequest
+}
+
+type dxgiCaptureRequest struct {
+	req  cap.Request
+	resp chan dxgiCaptureResponse
+}
+
+type dxgiCaptureResponse struct {
+	img *image.RGBA
+	err error
 }
 
 func newDXGIDuplicationManager(factory dxgiSessionFactory) *dxgiDuplicationManager {
@@ -60,30 +74,13 @@ func newDXGIDuplicationManager(factory dxgiSessionFactory) *dxgiDuplicationManag
 
 func (m *dxgiDuplicationManager) Capture(req cap.Request) (*image.RGBA, error) {
 	entry := m.entry(req.DisplayID)
-	entry.mu.Lock()
-	defer entry.mu.Unlock()
-
-	session, err := m.ensureSessionLocked(entry, req.DisplayID)
-	if err != nil {
-		return nil, err
+	resp := make(chan dxgiCaptureResponse, 1)
+	entry.worker.requests <- dxgiCaptureRequest{
+		req:  req,
+		resp: resp,
 	}
-
-	img, err := session.capture(req)
-	if err == nil {
-		return img, nil
-	}
-	if !errors.Is(err, errDXGIAccessLost) {
-		return nil, err
-	}
-
-	session.close()
-	entry.session = nil
-
-	session, err = m.ensureSessionLocked(entry, req.DisplayID)
-	if err != nil {
-		return nil, err
-	}
-	return session.capture(req)
+	result := <-resp
+	return result.img, result.err
 }
 
 func (m *dxgiDuplicationManager) entry(displayID int) *dxgiDuplicationEntry {
@@ -92,25 +89,90 @@ func (m *dxgiDuplicationManager) entry(displayID int) *dxgiDuplicationEntry {
 
 	entry := m.entries[displayID]
 	if entry == nil {
-		entry = &dxgiDuplicationEntry{}
+		entry = &dxgiDuplicationEntry{
+			worker: newDXGIDuplicationWorker(displayID, m.newSession),
+		}
 		m.entries[displayID] = entry
 	}
 	return entry
 }
 
-func (m *dxgiDuplicationManager) ensureSessionLocked(entry *dxgiDuplicationEntry, displayID int) (dxgiCaptureSession, error) {
-	if entry.session != nil {
-		return entry.session, nil
+func newDXGIDuplicationWorker(displayID int, factory dxgiSessionFactory) *dxgiDuplicationWorker {
+	worker := &dxgiDuplicationWorker{
+		requests: make(chan dxgiCaptureRequest),
+	}
+	go worker.run(displayID, factory)
+	return worker
+}
+
+func (w *dxgiDuplicationWorker) run(displayID int, factory dxgiSessionFactory) {
+	// Keep DXGI/Desktop Duplication work on a fixed OS thread. The reference
+	// implementations are all single-threaded here, and this avoids Go runtime
+	// thread migration across COM/D3D11/Desktop APIs.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	var session dxgiCaptureSession
+	defer func() {
+		if session != nil {
+			session.close()
+		}
+	}()
+
+	for request := range w.requests {
+		img, err := func() (img *image.RGBA, err error) {
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					if session != nil {
+						session.close()
+						session = nil
+					}
+					err = fmt.Errorf("DXGI capture panicked: %v", recovered)
+				}
+			}()
+
+			session, err = ensureDXGISession(session, displayID, factory)
+			if err != nil {
+				return nil, err
+			}
+
+			img, err = session.capture(request.req)
+			if err == nil {
+				return img, nil
+			}
+			if !errors.Is(err, errDXGIAccessLost) {
+				return nil, err
+			}
+
+			session.close()
+			session = nil
+
+			session, err = ensureDXGISession(session, displayID, factory)
+			if err != nil {
+				return nil, err
+			}
+			return session.capture(request.req)
+		}()
+
+		request.resp <- dxgiCaptureResponse{
+			img: img,
+			err: err,
+		}
+	}
+}
+
+func ensureDXGISession(session dxgiCaptureSession, displayID int, factory dxgiSessionFactory) (dxgiCaptureSession, error) {
+	if session != nil {
+		return session, nil
 	}
 
-	session, err := m.newSession(displayID)
+	session, err := factory(displayID)
 	if err != nil {
 		return nil, err
 	}
 	if session == nil {
 		return nil, errors.New("DXGI session factory returned nil session")
 	}
-	entry.session = session
 	return session, nil
 }
 

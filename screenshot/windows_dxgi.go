@@ -47,6 +47,10 @@ var (
 	procCreateDXGIFactory1 = modDXGI.NewProc("CreateDXGIFactory1")
 	modD3D11               = windows.NewLazySystemDLL("d3d11.dll")
 	procD3D11CreateDevice  = modD3D11.NewProc("D3D11CreateDevice")
+	modUser32DXGI          = windows.NewLazySystemDLL("user32.dll")
+	procOpenInputDesktop   = modUser32DXGI.NewProc("OpenInputDesktop")
+	procSetThreadDesktop   = modUser32DXGI.NewProc("SetThreadDesktop")
+	procCloseDesktop       = modUser32DXGI.NewProc("CloseDesktop")
 
 	iidIDXGIFactory1   = windows.GUID{Data1: 0x770aae78, Data2: 0xf26f, Data3: 0x4dba, Data4: [8]byte{0xa8, 0x29, 0x25, 0x3c, 0x83, 0xd1, 0xb3, 0x87}}
 	iidIDXGIOutput1    = windows.GUID{Data1: 0x00cddea8, Data2: 0x939b, Data3: 0x4b83, Data4: [8]byte{0xa3, 0x40, 0xa6, 0x85, 0x22, 0x66, 0x66, 0xcc}}
@@ -173,6 +177,44 @@ func newDXGIDuplicationSession(displayID int) (*dxgiDuplicationSession, error) {
 		context:     context,
 		duplication: duplication,
 	}, nil
+}
+
+func prepareDXGIThread() error {
+	openInputDesktopAddr, err := procAddress(procOpenInputDesktop)
+	if err != nil {
+		return nil
+	}
+	setThreadDesktopAddr, err := procAddress(procSetThreadDesktop)
+	if err != nil {
+		return nil
+	}
+	closeDesktopAddr, err := procAddress(procCloseDesktop)
+	if err != nil {
+		return nil
+	}
+
+	desktop, _, callErr := syscall.SyscallN(
+		openInputDesktopAddr,
+		0,
+		0,
+		uintptr(windows.GENERIC_ALL),
+	)
+	if desktop == 0 {
+		if callErr != 0 {
+			return nil
+		}
+		return nil
+	}
+	defer syscall.SyscallN(closeDesktopAddr, desktop)
+
+	result, _, callErr := syscall.SyscallN(setThreadDesktopAddr, desktop)
+	if result != 0 {
+		return nil
+	}
+	if callErr != 0 && callErr != windows.ERROR_BUSY {
+		return fmt.Errorf("SetThreadDesktop failed: %w", callErr)
+	}
+	return nil
 }
 
 func (s *dxgiDuplicationSession) close() {

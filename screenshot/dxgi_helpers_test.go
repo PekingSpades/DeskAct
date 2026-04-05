@@ -264,6 +264,24 @@ func TestDXGIDuplicationManagerAllowsDifferentDisplays(t *testing.T) {
 	}
 }
 
+func TestDXGIDuplicationManagerRecoversFromSessionPanic(t *testing.T) {
+	manager := newDXGIDuplicationManager(func(displayID int) (dxgiCaptureSession, error) {
+		return &fakeDXGISession{
+			captureFn: func(req cap.Request) (*image.RGBA, error) {
+				panic("boom")
+			},
+		}, nil
+	})
+
+	_, err := manager.Capture(cap.Request{DisplayID: 1})
+	if err == nil {
+		t.Fatal("expected panic to be converted into an error")
+	}
+	if got := err.Error(); got != "DXGI capture panicked: boom" {
+		t.Fatalf("unexpected panic error: %q", got)
+	}
+}
+
 type fakeDXGISession struct {
 	captureFn func(req cap.Request) (*image.RGBA, error)
 	closeFn   func()
