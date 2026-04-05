@@ -132,7 +132,7 @@ func main() {
 		draw.CatmullRom.Scale(overview, destRect, img, img.Bounds(), draw.Over, nil)
 
 		drawOriginLabel(overview, posX, posY, info.Origin.X, info.Origin.Y)
-		drawDisplayInfo(overview, posX, posY, destW, destH, info)
+		drawDisplayInfo(overview, posX, posY, destW, destH, info, captureBackendLabel(captureOptions.Backend))
 	}
 
 	overviewFile := "display_overview.png"
@@ -346,9 +346,10 @@ func savePNG(img image.Image, path string) error {
 	return png.Encode(file, img)
 }
 
-func drawDisplayInfo(img *image.RGBA, displayX, displayY, displayW, displayH int, info deskact.DisplayInfo) {
+func drawDisplayInfo(img *image.RGBA, displayX, displayY, displayW, displayH int, info deskact.DisplayInfo, backendLabel string) {
 	lines := []string{
 		fmt.Sprintf("Display #%d", info.Index),
+		fmt.Sprintf("Backend: %s", backendLabel),
 		fmt.Sprintf("Resolution: %dx%d", info.Size.W, info.Size.H),
 		fmt.Sprintf("Origin: (%d, %d, %d, %d)", info.Origin.X, info.Origin.Y, info.Origin.W, info.Origin.H),
 		fmt.Sprintf("Size: %dx%d", info.Size.W, info.Size.H),
