@@ -8,11 +8,32 @@ function parseOSWindowID(mediaSourceId) {
   return match ? match[1] : "";
 }
 
+function getMediaSourceId(win) {
+  if (typeof win.getMediaSourceId !== "function") {
+    return "";
+  }
+  return win.getMediaSourceId();
+}
+
 function formatNativeWindowHandle(buffer) {
   if (!Buffer.isBuffer(buffer)) {
     return "";
   }
   return "0x" + Buffer.from(buffer).toString("hex");
+}
+
+function getNativeWindowHandleHex(win) {
+  if (typeof win.getNativeWindowHandle !== "function") {
+    return "";
+  }
+  return formatNativeWindowHandle(win.getNativeWindowHandle());
+}
+
+function isContentProtectionEnabled(win, fallbackValue) {
+  if (typeof win.isContentProtected !== "function") {
+    return fallbackValue;
+  }
+  return win.isContentProtected();
 }
 
 function getDisplayData() {
@@ -63,15 +84,15 @@ function printToConsole(displays) {
 }
 
 function getWindowData(win) {
-  const mediaSourceId = win.getMediaSourceId();
+  const mediaSourceId = getMediaSourceId(win);
 
   return {
     title: win.getTitle(),
     electronWindowID: win.id,
     mediaSourceId,
     osWindowID: parseOSWindowID(mediaSourceId),
-    nativeWindowHandleHex: formatNativeWindowHandle(win.getNativeWindowHandle()),
-    contentProtectionEnabled: win.isContentProtected(),
+    nativeWindowHandleHex: getNativeWindowHandleHex(win),
+    contentProtectionEnabled: isContentProtectionEnabled(win, true),
   };
 }
 
