@@ -1,0 +1,294 @@
+// Copyright (c) 2016-2025 AtomAI, All rights reserved.
+//
+// See the COPYRIGHT file at the top-level directory of this distribution and at
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0>
+//
+// This file may not be copied, modified, or distributed
+// except according to those terms.
+
+#ifndef DISPLAY_C_WINDOWS_H
+#define DISPLAY_C_WINDOWS_H
+
+#include "../base/types.h"
+#include <windows.h>
+#include <stdio.h>
+
+// MDT_EFFECTIVE_DPI for GetDpiForMonitor
+#ifndef MDT_EFFECTIVE_DPI
+#define MDT_EFFECTIVE_DPI 0
+#endif
+
+// Function pointer type for GetDpiForMonitor
+typedef HRESULT (WINAPI *GetDpiForMonitorFunc)(HMONITOR, int, UINT*, UINT*);
+
+// Get DPI for a monitor using dynamic loading (Windows 8.1+)
+static double getMonitorScale(HMONITOR hMonitor) {
+    static GetDpiForMonitorFunc pGetDpiForMonitor = NULL;
+    static BOOL initialized = FALSE;
+
+    if (!initialized) {
+        initialized = TRUE;
+        HMODULE hShcore = LoadLibraryW(L"Shcore.dll");
+        if (hShcore) {
+            pGetDpiForMonitor = (GetDpiForMonitorFunc)GetProcAddress(hShcore, "GetDpiForMonitor");
+        }
+    }
+
+    if (pGetDpiForMonitor) {
+        UINT dpiX = 96, dpiY = 96;
+        HRESULT hr = pGetDpiForMonitor(hMonitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
+        if (SUCCEEDED(hr) && dpiX > 0) {
+            return (double)dpiX / 96.0;
+        }
+    }
+    return 1.0;
+}
+
+// DisplayInfoC contains display information in C struct
+typedef struct {
+    uintptr handle;     // HMONITOR handle
+    int32_t index;      // Display index
+    int8_t  isMain;     // Is main display
+    int32_t x, y, w, h; // Physical coordinates and size
+    int32_t vx, vy;     // Virtual (logical) coordinates origin
+    int32_t vw, vh;     // Virtual (logical) size
+    double  scale;      // Scale factor (physical/logical)
+    char    electronIdHashInput[256]; // Raw string for SuperFastHash (electron ID)
+    int32_t electronIdHashInputLen;  // Length of the hash input string
+} DisplayInfoC;
+
+// EnumDisplayContext is the enumeration context
+typedef struct {
+    int32_t       targetIndex;   // Target index (-1 means enumerate all)
+    int32_t       currentIndex;  // Current index
+    DisplayInfoC* displays;      // Output array
+    int32_t       maxCount;      // Max count
+    int32_t       foundCount;    // Found count
+} EnumDisplayContext;
+
+// Get the hash input string for computing Electron/Chromium display ID.
+// Algorithm from chromium/ui/display/win/display_info.cc:71-90:
+// 1. QueryDisplayConfig to get active paths
+// 2. Match GDI device name to find the path
+// 3. Output "adapterId.LowPart/adapterId.HighPart/targetInfo.id"
+// 4. Fallback: output UTF-8 device name
+static void getElectronIdHashInput(MONITORINFOEXW* monInfo, char* output, int32_t* outputLen) {
+    UINT32 pathCount = 0, modeCount = 0;
+    if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) != ERROR_SUCCESS) {
+        goto fallback;
+    }
+    if (pathCount == 0 || modeCount == 0) {
+        goto fallback;
+    }
+
+    {
+        DISPLAYCONFIG_PATH_INFO* paths = (DISPLAYCONFIG_PATH_INFO*)calloc(pathCount, sizeof(DISPLAYCONFIG_PATH_INFO));
+        DISPLAYCONFIG_MODE_INFO* modes = (DISPLAYCONFIG_MODE_INFO*)calloc(modeCount, sizeof(DISPLAYCONFIG_MODE_INFO));
+        if (!paths || !modes) {
+            free(paths);
+            free(modes);
+            goto fallback;
+        }
+
+        if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths, &modeCount, modes, NULL) != ERROR_SUCCESS) {
+            free(paths);
+            free(modes);
+            goto fallback;
+        }
+
+        for (UINT32 i = 0; i < pathCount; i++) {
+            DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName;
+            sourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+            sourceName.header.size = sizeof(sourceName);
+            sourceName.header.adapterId = paths[i].sourceInfo.adapterId;
+            sourceName.header.id = paths[i].sourceInfo.id;
+
+            if (DisplayConfigGetDeviceInfo(&sourceName.header) != ERROR_SUCCESS) {
+                continue;
+            }
+
+            if (wcscmp(sourceName.viewGdiDeviceName, monInfo->szDevice) == 0) {
+                // Found matching path - format adapter ID + target ID
+                int len = sprintf(output, "%lu/%li/%u",
+                    (unsigned long)paths[i].targetInfo.adapterId.LowPart,
+                    (long)paths[i].targetInfo.adapterId.HighPart,
+                    (unsigned int)paths[i].targetInfo.id);
+                *outputLen = (int32_t)len;
+                free(paths);
+                free(modes);
+                return;
+            }
+        }
+
+        free(paths);
+        free(modes);
+    }
+
+fallback:
+    {
+        // Fallback: convert GDI device name to UTF-8
+        int utf8Len = WideCharToMultiByte(CP_UTF8, 0, monInfo->szDevice, -1,
+                                          output, 256, NULL, NULL);
+        if (utf8Len > 1) {
+            *outputLen = (int32_t)(utf8Len - 1); // exclude null terminator
+        } else {
+            *outputLen = 0;
+        }
+    }
+}
+
+// Get monitor real physical size (bypassing DPI virtualization)
+// Reference: screenshot library's getMonitorRealSize implementation
+static int getMonitorRealSize(HMONITOR hMonitor, RECT* outRect) {
+    // Step 1: Get device name via GetMonitorInfoW
+    MONITORINFOEXW info = {0};
+    info.cbSize = sizeof(info);
+
+    if (!GetMonitorInfoW(hMonitor, (MONITORINFO*)&info)) {
+        return 0;  // Failed, caller should use logical coordinates as fallback
+    }
+
+    // Step 2: Get physical resolution via EnumDisplaySettingsW
+    DEVMODEW devMode = {0};
+    devMode.dmSize = sizeof(devMode);
+
+    if (!EnumDisplaySettingsW(info.szDevice, ENUM_CURRENT_SETTINGS, &devMode)) {
+        return 0;  // Failed
+    }
+
+    // Step 3: Build physical coordinate rect
+    outRect->left   = devMode.dmPosition.x;
+    outRect->top    = devMode.dmPosition.y;
+    outRect->right  = devMode.dmPosition.x + (LONG)devMode.dmPelsWidth;
+    outRect->bottom = devMode.dmPosition.y + (LONG)devMode.dmPelsHeight;
+
+    return 1;  // Success
+}
+
+// Monitor enumeration callback for counting
+static BOOL CALLBACK countMonitorCallback(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData) {
+    int32_t *count = (int32_t*)dwData;
+    (*count)++;
+    return TRUE;
+}
+
+// Monitor enumeration callback for getting info
+static BOOL CALLBACK MonitorInfoEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData) {
+    EnumDisplayContext* ctx = (EnumDisplayContext*)dwData;
+
+    if (ctx->currentIndex >= ctx->maxCount) {
+        return FALSE; // Stop enumeration
+    }
+
+    // Get physical size
+    RECT physRect;
+    int hasPhysical = getMonitorRealSize(hMonitor, &physRect);
+
+    // Get monitor info (to check if main display and get device name for electron ID)
+    MONITORINFOEXW mi = {0};
+    mi.cbSize = sizeof(mi);
+    GetMonitorInfoW(hMonitor, (MONITORINFO*)&mi);
+
+    DisplayInfoC* info = &ctx->displays[ctx->currentIndex];
+    info->handle = (uintptr)hMonitor;
+    info->index = ctx->currentIndex;
+    info->isMain = (mi.dwFlags & MONITORINFOF_PRIMARY) ? 1 : 0;
+    getElectronIdHashInput(&mi, info->electronIdHashInput, &info->electronIdHashInputLen);
+
+    // Always store virtual (logical) coordinates
+    info->vx = lprcMonitor->left;
+    info->vy = lprcMonitor->top;
+    int32_t logicalW = lprcMonitor->right - lprcMonitor->left;
+    int32_t logicalH = lprcMonitor->bottom - lprcMonitor->top;
+    info->vw = logicalW;
+    info->vh = logicalH;
+
+    if (hasPhysical) {
+        // Use physical coordinates
+        info->x = physRect.left;
+        info->y = physRect.top;
+        info->w = physRect.right - physRect.left;
+        info->h = physRect.bottom - physRect.top;
+
+        // Calculate scale based on DPI awareness mode
+        if (logicalW > 0 && info->w != logicalW) {
+            // Physical and logical sizes differ (DPI unaware mode)
+            // Windows virtualizes coordinates, use ratio to calculate scale
+            info->scale = (double)info->w / (double)logicalW;
+        } else {
+            // Physical and logical sizes are same (DPI aware mode)
+            // Use GetDpiForMonitor to get actual scale
+            info->scale = getMonitorScale(hMonitor);
+        }
+    } else {
+        // Fallback: use logical coordinates
+        info->x = lprcMonitor->left;
+        info->y = lprcMonitor->top;
+        info->w = logicalW;
+        info->h = logicalH;
+        info->scale = 1.0;
+    }
+
+    ctx->currentIndex++;
+    ctx->foundCount++;
+    return TRUE;  // Continue enumeration
+}
+
+// Get display count
+static int32_t getDisplayCount() {
+    int32_t count = 0;
+    EnumDisplayMonitors(NULL, NULL, countMonitorCallback, (LPARAM)&count);
+    return count;
+}
+
+// Get all displays info
+static int32_t getAllDisplays(DisplayInfoC* displays, int32_t maxCount) {
+    EnumDisplayContext ctx = {0};
+    ctx.targetIndex = -1;
+    ctx.currentIndex = 0;
+    ctx.displays = displays;
+    ctx.maxCount = maxCount;
+    ctx.foundCount = 0;
+
+    EnumDisplayMonitors(NULL, NULL, MonitorInfoEnumProc, (LPARAM)&ctx);
+    return ctx.foundCount;
+}
+
+// Get main display info
+static DisplayInfoC getMainDisplay() {
+    DisplayInfoC displays[32];
+    int32_t count = getAllDisplays(displays, 32);
+
+    for (int32_t i = 0; i < count; i++) {
+        if (displays[i].isMain) {
+            return displays[i];
+        }
+    }
+
+    // Fallback: return first display
+    if (count > 0) {
+        return displays[0];
+    }
+
+    // No display found
+    DisplayInfoC empty = {0};
+    return empty;
+}
+
+// Get display at index
+static DisplayInfoC getDisplayAt(int32_t index) {
+    DisplayInfoC displays[32];
+    int32_t count = getAllDisplays(displays, 32);
+
+    if (index >= 0 && index < count) {
+        return displays[index];
+    }
+
+    // Index out of range
+    DisplayInfoC empty = {0};
+    return empty;
+}
+
+#endif /* DISPLAY_C_WINDOWS_H */

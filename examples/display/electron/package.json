@@ -1,0 +1,39 @@
+{
+  "name": "deskact-electron-display",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win --x64",
+    "build:mac": "electron-builder --mac --arm64",
+    "build": "electron-builder"
+  },
+  "build": {
+    "appId": "com.deskact.electron-display",
+    "productName": "DeskAct Display Info",
+    "files": [
+      "main.js",
+      "index.html"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": ["arm64"]
+        }
+      ]
+    }
+  },
+  "devDependencies": {
+    "electron": "^36.5.0",
+    "electron-builder": "^26.0.0"
+  }
+}
