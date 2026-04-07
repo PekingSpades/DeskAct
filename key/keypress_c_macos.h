@@ -31,6 +31,121 @@ static int SendTo(uintptr pid, CGEventRef event) {
 	return 0;
 }
 
+static CGEventSourceRef CreateKeyboardEventSource(void) {
+	return CGEventSourceCreate(kCGEventSourceStateCombinedSessionState);
+}
+
+static CGEventFlags modifierFlagForKeyCode(MMKeyCode code) {
+	if (code == K_META || code == K_LMETA || code == K_RMETA) {
+		return kCGEventFlagMaskCommand;
+	}
+	if (code == K_ALT || code == K_LALT || code == K_RALT) {
+		return kCGEventFlagMaskAlternate;
+	}
+	if (code == K_CONTROL || code == K_LCONTROL || code == K_RCONTROL) {
+		return kCGEventFlagMaskControl;
+	}
+	if (code == K_SHIFT || code == K_LSHIFT || code == K_RSHIFT) {
+		return kCGEventFlagMaskShift;
+	}
+	if (code == K_CAPSLOCK) {
+		return kCGEventFlagMaskAlphaShift;
+	}
+	return 0;
+}
+
+static int postKeyboardEvent(MMKeyCode code, bool down, CGEventFlags flags, uintptr pid) {
+	CGEventSourceRef source = CreateKeyboardEventSource();
+	if (source == NULL) {
+		return MM_KEY_ERR_EVENT;
+	}
+	CGEventRef keyEvent = CGEventCreateKeyboardEvent(source, (CGKeyCode)code, down);
+	CGEventFlags modifierFlag = modifierFlagForKeyCode(code);
+	CGEventType eventType = down ? kCGEventKeyDown : kCGEventKeyUp;
+	if (keyEvent == NULL) {
+		CFRelease(source);
+		return MM_KEY_ERR_EVENT;
+	}
+
+	if (modifierFlag != 0) {
+		eventType = kCGEventFlagsChanged;
+		if (down) {
+			flags |= modifierFlag;
+		} else {
+			flags &= ~modifierFlag;
+		}
+	}
+
+	CGEventSetType(keyEvent, eventType);
+	CGEventSetFlags(keyEvent, flags);
+
+	SendTo(pid, keyEvent);
+	CFRelease(source);
+	return MM_KEY_OK;
+}
+
+static int pressModifierFlags(CGEventFlags flags, uintptr pid) {
+	CGEventFlags active = 0;
+
+	if (flags & kCGEventFlagMaskCommand) {
+		active |= kCGEventFlagMaskCommand;
+		int err = postKeyboardEvent(K_META, true, active, pid);
+		if (err != MM_KEY_OK) { return err; }
+		microsleep(1.0);
+	}
+	if (flags & kCGEventFlagMaskAlternate) {
+		active |= kCGEventFlagMaskAlternate;
+		int err = postKeyboardEvent(K_ALT, true, active, pid);
+		if (err != MM_KEY_OK) { return err; }
+		microsleep(1.0);
+	}
+	if (flags & kCGEventFlagMaskControl) {
+		active |= kCGEventFlagMaskControl;
+		int err = postKeyboardEvent(K_CONTROL, true, active, pid);
+		if (err != MM_KEY_OK) { return err; }
+		microsleep(1.0);
+	}
+	if (flags & kCGEventFlagMaskShift) {
+		active |= kCGEventFlagMaskShift;
+		int err = postKeyboardEvent(K_SHIFT, true, active, pid);
+		if (err != MM_KEY_OK) { return err; }
+		microsleep(1.0);
+	}
+
+	return MM_KEY_OK;
+}
+
+static int releaseModifierFlags(CGEventFlags flags, uintptr pid) {
+	CGEventFlags active = flags;
+
+	if (flags & kCGEventFlagMaskShift) {
+		active &= ~kCGEventFlagMaskShift;
+		int err = postKeyboardEvent(K_SHIFT, false, active, pid);
+		if (err != MM_KEY_OK) { return err; }
+		microsleep(1.0);
+	}
+	if (flags & kCGEventFlagMaskControl) {
+		active &= ~kCGEventFlagMaskControl;
+		int err = postKeyboardEvent(K_CONTROL, false, active, pid);
+		if (err != MM_KEY_OK) { return err; }
+		microsleep(1.0);
+	}
+	if (flags & kCGEventFlagMaskAlternate) {
+		active &= ~kCGEventFlagMaskAlternate;
+		int err = postKeyboardEvent(K_ALT, false, active, pid);
+		if (err != MM_KEY_OK) { return err; }
+		microsleep(1.0);
+	}
+	if (flags & kCGEventFlagMaskCommand) {
+		active &= ~kCGEventFlagMaskCommand;
+		int err = postKeyboardEvent(K_META, false, active, pid);
+		if (err != MM_KEY_OK) { return err; }
+		microsleep(1.0);
+	}
+
+	return MM_KEY_OK;
+}
+
 static io_connect_t _getAuxiliaryKeyDriver(void) {
 	static mach_port_t sEventDrvrRef = 0;
 	mach_port_t masterPort, service, iter;
@@ -86,38 +201,25 @@ int keyTap(MMKeyCode code, MMKeyFlags flags) {
 		return postMediaKeyEvent(code, false);
 	}
 
-	/* macOS: CGEventFlags makes it atomic - modifiers are set on the event itself */
-	CGEventSourceRef source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
-	if (source == NULL) {
-		return MM_KEY_ERR_EVENT;
+	CGEventFlags eventFlags = (CGEventFlags)flags;
+	int err = pressModifierFlags(eventFlags, 0);
+	if (err != MM_KEY_OK) { return err; }
+
+	err = postKeyboardEvent(code, true, eventFlags, 0);
+	if (err != MM_KEY_OK) {
+		releaseModifierFlags(eventFlags, 0);
+		return err;
 	}
 
-	/* Press */
-	CGEventRef keyDown = CGEventCreateKeyboardEvent(source, (CGKeyCode)code, true);
-	if (keyDown == NULL) {
-		CFRelease(source);
-		return MM_KEY_ERR_EVENT;
-	}
-	if (flags != 0) {
-		CGEventSetFlags(keyDown, (CGEventFlags)flags);
-	}
-	CGEventPost(kCGHIDEventTap, keyDown);
-	CFRelease(keyDown);
+	microsleep(5.0);
 
-	/* Release */
-	CGEventRef keyUp = CGEventCreateKeyboardEvent(source, (CGKeyCode)code, false);
-	if (keyUp == NULL) {
-		CFRelease(source);
-		return MM_KEY_ERR_EVENT;
+	err = postKeyboardEvent(code, false, eventFlags, 0);
+	if (err != MM_KEY_OK) {
+		releaseModifierFlags(eventFlags, 0);
+		return err;
 	}
-	if (flags != 0) {
-		CGEventSetFlags(keyUp, (CGEventFlags)flags);
-	}
-	CGEventPost(kCGHIDEventTap, keyUp);
-	CFRelease(keyUp);
 
-	CFRelease(source);
-	return MM_KEY_OK;
+	return releaseModifierFlags(eventFlags, 0);
 }
 
 /*
@@ -133,89 +235,57 @@ int keyToggle(MMKeyCode code, const bool down, MMKeyFlags flags) {
 		return postMediaKeyEvent(code, down);
 	}
 
-	/* macOS: CGEventFlags makes it atomic */
-	CGEventSourceRef source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
-	if (source == NULL) {
-		return MM_KEY_ERR_EVENT;
-	}
-	CGEventRef keyEvent = CGEventCreateKeyboardEvent(source, (CGKeyCode)code, down);
-
-	if (keyEvent == NULL) {
-		CFRelease(source);
-		return MM_KEY_ERR_EVENT;
+	CGEventFlags eventFlags = (CGEventFlags)flags;
+	if (down) {
+		int err = pressModifierFlags(eventFlags, 0);
+		if (err != MM_KEY_OK) { return err; }
+		return postKeyboardEvent(code, true, eventFlags, 0);
 	}
 
-	CGEventSetType(keyEvent, down ? kCGEventKeyDown : kCGEventKeyUp);
-	if (flags != 0) {
-		CGEventSetFlags(keyEvent, (CGEventFlags)flags);
-	}
-
-	CGEventPost(kCGHIDEventTap, keyEvent);
-	CFRelease(keyEvent);
-	CFRelease(source);
-	return MM_KEY_OK;
+	int err = postKeyboardEvent(code, false, eventFlags, 0);
+	if (err != MM_KEY_OK) { return err; }
+	return releaseModifierFlags(eventFlags, 0);
 }
 
 /*
  * keyTapPid - Key tap to a specific process (non-atomic, uses PostMessage on Windows)
  */
 int keyTapPid(MMKeyCode code, MMKeyFlags flags, uintptr pid) {
-	/* macOS: supports PID natively */
-	CGEventSourceRef source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
-	if (source == NULL) {
-		return MM_KEY_ERR_EVENT;
+	CGEventFlags eventFlags = (CGEventFlags)flags;
+	int err = pressModifierFlags(eventFlags, pid);
+	if (err != MM_KEY_OK) { return err; }
+
+	err = postKeyboardEvent(code, true, eventFlags, pid);
+	if (err != MM_KEY_OK) {
+		releaseModifierFlags(eventFlags, pid);
+		return err;
 	}
 
-	CGEventRef keyDown = CGEventCreateKeyboardEvent(source, (CGKeyCode)code, true);
-	if (keyDown == NULL) {
-		CFRelease(source);
-		return MM_KEY_ERR_EVENT;
-	}
-	if (flags != 0) {
-		CGEventSetFlags(keyDown, (CGEventFlags)flags);
-	}
-	CGEventPostToPid(pid, keyDown);
-	CFRelease(keyDown);
+	microsleep(5.0);
 
-	CGEventRef keyUp = CGEventCreateKeyboardEvent(source, (CGKeyCode)code, false);
-	if (keyUp == NULL) {
-		CFRelease(source);
-		return MM_KEY_ERR_EVENT;
+	err = postKeyboardEvent(code, false, eventFlags, pid);
+	if (err != MM_KEY_OK) {
+		releaseModifierFlags(eventFlags, pid);
+		return err;
 	}
-	if (flags != 0) {
-		CGEventSetFlags(keyUp, (CGEventFlags)flags);
-	}
-	CGEventPostToPid(pid, keyUp);
-	CFRelease(keyUp);
 
-	CFRelease(source);
-	return MM_KEY_OK;
+	return releaseModifierFlags(eventFlags, pid);
 }
 
 /*
  * keyTogglePid - Key toggle to a specific process
  */
 int keyTogglePid(MMKeyCode code, const bool down, MMKeyFlags flags, uintptr pid) {
-	CGEventSourceRef source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
-	if (source == NULL) {
-		return MM_KEY_ERR_EVENT;
-	}
-	CGEventRef keyEvent = CGEventCreateKeyboardEvent(source, (CGKeyCode)code, down);
-
-	if (keyEvent == NULL) {
-		CFRelease(source);
-		return MM_KEY_ERR_EVENT;
+	CGEventFlags eventFlags = (CGEventFlags)flags;
+	if (down) {
+		int err = pressModifierFlags(eventFlags, pid);
+		if (err != MM_KEY_OK) { return err; }
+		return postKeyboardEvent(code, true, eventFlags, pid);
 	}
 
-	CGEventSetType(keyEvent, down ? kCGEventKeyDown : kCGEventKeyUp);
-	if (flags != 0) {
-		CGEventSetFlags(keyEvent, (CGEventFlags)flags);
-	}
-
-	CGEventPostToPid(pid, keyEvent);
-	CFRelease(keyEvent);
-	CFRelease(source);
-	return MM_KEY_OK;
+	int err = postKeyboardEvent(code, false, eventFlags, pid);
+	if (err != MM_KEY_OK) { return err; }
+	return releaseModifierFlags(eventFlags, pid);
 }
 
 /*
@@ -236,7 +306,11 @@ void toggleKey(char c, const bool down, MMKeyFlags flags, uintptr pid) {
 }
 
 void toggleUnicode(const UniChar *chars, size_t len, const bool down, uintptr pid) {
-	CGEventSourceRef source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
+	CGEventSourceRef source = CreateKeyboardEventSource();
+	if (source == NULL) {
+		fputs("Could not create event source.\n", stderr);
+		return;
+	}
 	CGEventRef keyEvent = CGEventCreateKeyboardEvent(source, 0, down);
 	if (keyEvent == NULL) {
 		fputs("Could not create keyboard event.\n", stderr);
