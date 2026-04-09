@@ -28,5 +28,23 @@ go.work.sum
 .env
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+.deskact-tester/
+.deskact-tester/*
+
+.refer
+.refer/*
+
+.apps
+.apps/*
+
+display_*.png
+window_*.png
+
+# Electron example
+node_modules/
+dist/
+package-lock.json
+.claude/settings.json
+.claude/settings.local.json
