@@ -52,3 +52,4 @@ package-lock.json
 # Non-GitHub CI artifacts and VM state
 artifacts/
 scripts/non-github-ci/.deskact-vms/
+bin/
