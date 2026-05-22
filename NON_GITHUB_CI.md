@@ -32,7 +32,7 @@ Linux host requirements:
 - Go
 - Node.js and npm
 - `zip` or `7z`
-- Linux CGO dependencies: `libx11-dev`, `libxtst-dev`, `libxinerama-dev`, `libxrandr-dev`, `libpng-dev`
+- Linux CGO dependencies: `libx11-dev`, `libxtst-dev`, `libxinerama-dev`, `libxrandr-dev`, `libpng-dev`, `libxcomposite-dev`, `libxrender-dev`, `libxfixes-dev`
 - Optional Windows/macOS VM builds: an x86_64 machine with nested virtualization enabled, Docker with Compose plugin, `/dev/kvm`, and `/dev/net/tun`
 
 Run:

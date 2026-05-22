@@ -79,6 +79,9 @@ if [[ "${check_linux_deps}" == "1" && "$(uname -s)" == "Linux" ]]; then
   check_pkg_config xinerama
   check_pkg_config xrandr
   check_pkg_config libpng
+  check_pkg_config xcomposite
+  check_pkg_config xrender
+  check_pkg_config xfixes
 fi
 
 if [[ "${include_vms}" == "1" ]]; then
