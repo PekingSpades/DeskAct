@@ -125,3 +125,25 @@ func ScrollPixels(x, y int, settings MouseSettings) error {
 func ScrollSmooth(delta ScrollDelta, settings MouseSettings) error {
 	return m.ScrollSmooth(delta, settings)
 }
+
+// Per-window (non-preemptive) mouse APIs. Cursor/focus are unaffected.
+
+type MouseWindowTarget = m.WindowTarget
+
+var ErrMouseWindowMissing = m.ErrMouseWindowMissing
+
+func MoveWithWindow(t MouseWindowTarget, x, y int, settings MouseSettings) error {
+	return m.MoveWithWindow(t, x, y, settings)
+}
+
+func ClickWithWindow(t MouseWindowTarget, x, y int, button MouseButton, settings MouseSettings) error {
+	return m.ClickWithWindow(t, x, y, button, settings)
+}
+
+func ToggleWithWindow(t MouseWindowTarget, x, y int, button MouseButton, down bool, settings MouseSettings) error {
+	return m.ToggleWithWindow(t, x, y, button, down, settings)
+}
+
+func ScrollWithWindow(t MouseWindowTarget, x, y, dx, dy int, unit ScrollUnit, settings MouseSettings) error {
+	return m.ScrollWithWindow(t, x, y, dx, dy, unit, settings)
+}
