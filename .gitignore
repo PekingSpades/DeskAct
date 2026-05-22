@@ -48,3 +48,7 @@ dist/
 package-lock.json
 .claude/settings.json
 .claude/settings.local.json
+
+# Non-GitHub CI artifacts and VM state
+artifacts/
+scripts/non-github-ci/.deskact-vms/

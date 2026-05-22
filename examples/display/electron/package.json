@@ -5,7 +5,8 @@
   "scripts": {
     "start": "electron .",
     "build:win": "electron-builder --win --x64",
-    "build:mac": "electron-builder --mac --arm64",
+    "build:mac": "electron-builder --mac --x64",
+    "build:linux": "electron-builder --linux --x64",
     "build": "electron-builder"
   },
   "build": {
@@ -27,7 +28,15 @@
       "target": [
         {
           "target": "dir",
-          "arch": ["arm64"]
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": ["x64"]
         }
       ]
     }

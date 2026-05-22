@@ -1,0 +1,58 @@
+name: deskact-non-github-ci
+
+services:
+  windows:
+    image: dockurr/windows
+    container_name: deskact-windows-builder
+    environment:
+      VERSION: "${DESKACT_WINDOWS_VERSION:-2022}"
+      RAM_SIZE: "${DESKACT_WINDOWS_RAM:-16G}"
+      CPU_CORES: "${DESKACT_WINDOWS_CPUS:-8}"
+      DISK_SIZE: "${DESKACT_WINDOWS_DISK:-128G}"
+      USERNAME: "${DESKACT_WINDOWS_USER:-Docker}"
+      PASSWORD: "${DESKACT_WINDOWS_PASSWORD:-admin}"
+      LANGUAGE: "${DESKACT_WINDOWS_LANGUAGE:-English}"
+      REGION: "${DESKACT_WINDOWS_REGION:-en-US}"
+      KEYBOARD: "${DESKACT_WINDOWS_KEYBOARD:-en-US}"
+    devices:
+      - /dev/kvm
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    privileged: true
+    ports:
+      - "${DESKACT_WINDOWS_WEB_PORT:-8026}:8006"
+      - "${DESKACT_WINDOWS_RDP_PORT:-3400}:3389/tcp"
+      - "${DESKACT_WINDOWS_RDP_PORT:-3400}:3389/udp"
+    volumes:
+      - "${DESKACT_WINDOWS_STORAGE:-./.deskact-vms/windows}:/storage"
+      - "./oem/windows:/oem:ro"
+      - "${DESKACT_VM_SHARED:-../..}:/shared"
+    restart: unless-stopped
+    stop_grace_period: 2m
+
+  macos:
+    image: dockurr/macos
+    container_name: deskact-macos-builder
+    profiles:
+      - macos
+    environment:
+      VERSION: "${DESKACT_MACOS_VERSION:-14}"
+      RAM_SIZE: "${DESKACT_MACOS_RAM:-16G}"
+      CPU_CORES: "${DESKACT_MACOS_CPUS:-8}"
+      DISK_SIZE: "${DESKACT_MACOS_DISK:-128G}"
+    devices:
+      - /dev/kvm
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    privileged: true
+    ports:
+      - "${DESKACT_MACOS_WEB_PORT:-8027}:8006"
+      - "${DESKACT_MACOS_VNC_PORT:-5921}:5900/tcp"
+      - "${DESKACT_MACOS_VNC_PORT:-5921}:5900/udp"
+    volumes:
+      - "${DESKACT_MACOS_STORAGE:-./.deskact-vms/macos}:/storage"
+      - "${DESKACT_VM_SHARED:-../..}:/shared"
+    restart: unless-stopped
+    stop_grace_period: 2m
