@@ -147,3 +147,33 @@ artifacts/non-github-ci/v0.1.0/
   and checksums only.
 - No signing, notarization, installer packaging, or artifact upload is handled
   by this path.
+
+## Non-preemptive window ops + per-window screenshot
+
+The `examples/windowops/` and `examples/windowops/selftest/` binaries
+exercise the per-window screenshot, mouse, keyboard, and window-ops APIs
+added on `feature/non-preemptive-window-ops`. Both are produced under
+`go/<platform>/examples/windowops*` for all three platforms.
+
+Inside-VM verification glue lives in `scripts/non-github-ci/verify/`:
+
+```bash
+# Linux host (X session required)
+bash scripts/non-github-ci/verify/run-linux-selftest.sh \
+  --scenario scripts/non-github-ci/verify/scenarios/xterm-basic.json
+
+# Windows dockur VM (after the standard windows build has produced
+# artifacts/non-github-ci/<ver>/go/windows-amd64/examples/windowops-selftest.exe)
+bash scripts/non-github-ci/verify/run-windows-vm-selftest.sh
+
+# macOS dockur VM (requires --enable-dockur-macos, Accessibility +
+# Screen Recording permission granted to the Terminal app inside the VM)
+bash scripts/non-github-ci/verify/run-macos-vm-selftest.sh
+```
+
+The Windows WGC C++ wrapper (`screenshot/windows_wgc.cpp`) currently
+returns a runtime-unavailable status; capture transparently falls back
+to `PrintWindow(PW_RENDERFULLCONTENT)`. The `bootstrap-windows.ps1`
+worker installs the mingw-w64 headers/crt/winpthreads packages needed
+for the eventual C-ABI WGC rewrite and runs a header sanity check.
+
