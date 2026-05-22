@@ -182,12 +182,12 @@ func findTarget(m WindowMatch) (deskact.MouseWindowTarget, deskact.WindowInfo, e
 	return deskact.MouseWindowTarget{WindowID: w.ID, PID: int32(w.PID)}, w, nil
 }
 
-func runStep(s Scenario, t deskact.MouseWindowTarget, w deskact.WindowInfo, idx int, step ScenarioOp) StepReport {
+func runStep(s Scenario, t deskact.MouseWindowTarget, w deskact.WindowInfo, idx int, step ScenarioOp) (sr StepReport) {
 	if step.DelayMs > 0 {
 		time.Sleep(time.Duration(step.DelayMs) * time.Millisecond)
 	}
 	start := time.Now()
-	sr := StepReport{Op: step.Op}
+	sr = StepReport{Op: step.Op}
 
 	defer func() {
 		sr.ElapsedMs = time.Since(start).Milliseconds()
