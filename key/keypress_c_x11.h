@@ -113,17 +113,125 @@ int keyToggle(MMKeyCode code, const bool down, MMKeyFlags flags) {
 }
 
 /*
- * keyTapPid - Key tap to a specific process (non-atomic, uses PostMessage on Windows)
+ * keyTapXID - Send a synthetic KeyPress + KeyRelease to a specific X11 window.
+ *
+ * Uses XSendEvent so the user's actual focus is not disturbed. Modifier flags
+ * are encoded in the event's `state` field rather than as separate fake key
+ * events, because XSendEvent does not update the server-side modifier state.
+ *
+ * Caveat: applications may inspect the `send_event` field on the resulting
+ * XKeyEvent and ignore synthetic input. This is a protocol-level limitation
+ * that no client-side workaround can defeat.
+ */
+static int keyTapXID(MMKeyCode code, MMKeyFlags flags, unsigned long xid) {
+	Display *display = XGetMainDisplay();
+	if (display == NULL) {
+		return MM_KEY_ERR_DISPLAY;
+	}
+	if (xid == 0) {
+		return MM_KEY_ERR_WINDOW;
+	}
+
+	KeyCode keycode = XKeysymToKeycode(display, code);
+	if (keycode == 0) {
+		return MM_KEY_ERR_EVENT;
+	}
+
+	Window root = DefaultRootWindow(display);
+
+	XKeyEvent press;
+	press.type = KeyPress;
+	press.display = display;
+	press.window = (Window)xid;
+	press.root = root;
+	press.subwindow = None;
+	press.time = CurrentTime;
+	press.x = 1;
+	press.y = 1;
+	press.x_root = 1;
+	press.y_root = 1;
+	press.state = (unsigned int)flags;
+	press.keycode = keycode;
+	press.same_screen = True;
+	press.send_event = True;
+	press.serial = 0;
+
+	if (!XSendEvent(display, (Window)xid, True, KeyPressMask, (XEvent *)&press)) {
+		return MM_KEY_ERR_POST;
+	}
+
+	XKeyEvent release = press;
+	release.type = KeyRelease;
+	if (!XSendEvent(display, (Window)xid, True, KeyReleaseMask, (XEvent *)&release)) {
+		return MM_KEY_ERR_POST;
+	}
+
+	XSync(display, False);
+	return MM_KEY_OK;
+}
+
+/*
+ * keyToggleXID - Send a synthetic KeyPress OR KeyRelease (not both) to a
+ * specific X11 window.
+ */
+static int keyToggleXID(MMKeyCode code, const bool down, MMKeyFlags flags, unsigned long xid) {
+	Display *display = XGetMainDisplay();
+	if (display == NULL) {
+		return MM_KEY_ERR_DISPLAY;
+	}
+	if (xid == 0) {
+		return MM_KEY_ERR_WINDOW;
+	}
+	KeyCode keycode = XKeysymToKeycode(display, code);
+	if (keycode == 0) {
+		return MM_KEY_ERR_EVENT;
+	}
+
+	XKeyEvent ev;
+	ev.type = down ? KeyPress : KeyRelease;
+	ev.display = display;
+	ev.window = (Window)xid;
+	ev.root = DefaultRootWindow(display);
+	ev.subwindow = None;
+	ev.time = CurrentTime;
+	ev.x = 1;
+	ev.y = 1;
+	ev.x_root = 1;
+	ev.y_root = 1;
+	ev.state = (unsigned int)flags;
+	ev.keycode = keycode;
+	ev.same_screen = True;
+	ev.send_event = True;
+	ev.serial = 0;
+
+	long mask = down ? KeyPressMask : KeyReleaseMask;
+	if (!XSendEvent(display, (Window)xid, True, mask, (XEvent *)&ev)) {
+		return MM_KEY_ERR_POST;
+	}
+	XSync(display, False);
+	return MM_KEY_OK;
+}
+
+/*
+ * keyTapPid - On X11 the historical "pid" parameter is reinterpreted as an
+ * X11 Window XID (matching Windows where the same parameter is HWND). When
+ * xid==0 we fall back to the global XTest path so legacy callers that pass
+ * a real PID without first resolving it to a window still observe input.
  */
 int keyTapPid(MMKeyCode code, MMKeyFlags flags, uintptr pid) {
-	/* X11: no direct PID support, fall back to global */
+	if (pid != 0) {
+		return keyTapXID(code, flags, (unsigned long)pid);
+	}
 	return keyTap(code, flags);
 }
 
 /*
- * keyTogglePid - Key toggle to a specific process
+ * keyTogglePid - X11 reinterpretation: pid is treated as a Window XID.
  */
 int keyTogglePid(MMKeyCode code, const bool down, MMKeyFlags flags, uintptr pid) {
+	if (pid != 0) {
+		return keyToggleXID(code, down, flags, (unsigned long)pid);
+	}
 	return keyToggle(code, down, flags);
 }
 
