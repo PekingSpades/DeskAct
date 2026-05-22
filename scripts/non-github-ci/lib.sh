@@ -15,6 +15,8 @@ GO_TARGETS=(
   "mouse:./examples/mouse"
   "window:./examples/window"
   "apps:./examples/apps"
+  "windowops:./examples/windowops"
+  "windowops-selftest:./examples/windowops/selftest"
 )
 
 log() {

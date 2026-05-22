@@ -131,7 +131,9 @@ $targets = @(
     @{ Name = 'keyboard'; Package = './examples/keyboard'; Output = (Join-Path $ExamplesDir 'keyboard.exe') },
     @{ Name = 'mouse'; Package = './examples/mouse'; Output = (Join-Path $ExamplesDir 'mouse.exe') },
     @{ Name = 'window'; Package = './examples/window'; Output = (Join-Path $ExamplesDir 'window.exe') },
-    @{ Name = 'apps'; Package = './examples/apps'; Output = (Join-Path $ExamplesDir 'apps.exe') }
+    @{ Name = 'apps'; Package = './examples/apps'; Output = (Join-Path $ExamplesDir 'apps.exe') },
+    @{ Name = 'windowops'; Package = './examples/windowops'; Output = (Join-Path $ExamplesDir 'windowops.exe') },
+    @{ Name = 'windowops-selftest'; Package = './examples/windowops/selftest'; Output = (Join-Path $ExamplesDir 'windowops-selftest.exe') }
 )
 
 foreach ($target in $targets) {
