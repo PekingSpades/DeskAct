@@ -111,18 +111,50 @@ function Ensure-MSYS2 {
 
 function Ensure-MingwGcc {
     Refresh-Path
-    if (Get-Command gcc -ErrorAction SilentlyContinue) {
+    if (Get-Command gcc -ErrorAction SilentlyContinue -and
+        (Get-Command g++ -ErrorAction SilentlyContinue)) {
         return
     }
 
-    Write-Step 'installing MinGW GCC with MSYS2'
+    Write-Step 'installing MinGW GCC, G++, headers, and CRT with MSYS2'
     $msysBash = 'C:\msys64\usr\bin\bash.exe'
     & $msysBash -lc 'pacman -Syuu --needed --noconfirm || true'
-    & $msysBash -lc 'pacman -Sy --needed --noconfirm mingw-w64-x86_64-gcc'
+    # gcc pulls g++ on mingw-w64 packages, but list both for safety.
+    # headers-git + crt-git + winpthreads-git keep the WinRT ABI headers
+    # (windows.graphics.capture.h, .interop.h) up to date so the screenshot
+    # WGC C++ wrapper compiles. winrt provides extra ABI helpers.
+    & $msysBash -lc 'pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-headers-git mingw-w64-x86_64-crt-git mingw-w64-x86_64-winpthreads-git mingw-w64-x86_64-tools-git mingw-w64-x86_64-pkgconf'
     if ($LASTEXITCODE -ne 0) {
         throw "MSYS2 pacman failed with exit code $LASTEXITCODE"
     }
     Refresh-Path
+}
+
+function Verify-WinRTHeaders {
+    Refresh-Path
+    $gxx = Get-Command g++ -ErrorAction SilentlyContinue
+    if (-not $gxx) {
+        $gxx = Get-Command x86_64-w64-mingw32-g++ -ErrorAction SilentlyContinue
+    }
+    if (-not $gxx) {
+        Write-Step 'g++ not found; skipping WinRT header sanity check'
+        return
+    }
+    Write-Step 'verifying WinRT/WGC headers compile (windows.graphics.capture.interop.h)'
+    $sentinel = Join-Path $Script:CacheDir 'wgc-header-check.cpp'
+    @'
+#include <windows.h>
+#include <windows.graphics.capture.h>
+#include <windows.graphics.capture.interop.h>
+int main(){return 0;}
+'@ | Out-File -FilePath $sentinel -Encoding ASCII
+    $obj = Join-Path $Script:CacheDir 'wgc-header-check.o'
+    & $gxx.Source -std=c++17 -c $sentinel -o $obj 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Step 'WARNING: WinRT/WGC headers are not usable on this worker; the screenshot WGC path will be a runtime stub and PrintWindow will be used.'
+    } else {
+        Write-Step 'WinRT/WGC headers OK'
+    }
 }
 
 $Script:CacheDir = Join-Path $env:TEMP 'deskact-build-tools'
@@ -133,6 +165,7 @@ Ensure-Go
 Ensure-Node
 Ensure-MSYS2
 Ensure-MingwGcc
+Verify-WinRTHeaders
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     Write-Step 'git is unavailable; manifest gitCommit will be empty unless Git is installed manually'
