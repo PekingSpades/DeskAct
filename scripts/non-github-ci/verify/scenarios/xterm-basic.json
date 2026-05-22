@@ -1,0 +1,15 @@
+{
+  "outDir": "%OUTDIR%",
+  "initDpiAware": false,
+  "windowMatch": { "titleContains": "xterm" },
+  "steps": [
+    { "op": "screenshot", "name": "01-before.png" },
+    { "op": "move",  "x": 120, "y": 120, "delayMs": 200 },
+    { "op": "resize", "w": 720, "h": 480, "delayMs": 200 },
+    { "op": "screenshot", "name": "02-after-move-resize.png" },
+    { "op": "focus", "delayMs": 100 },
+    { "op": "click", "x": 40, "y": 40, "button": "left", "delayMs": 200 },
+    { "op": "type", "text": "deskact selftest", "delayMs": 200 },
+    { "op": "screenshot", "name": "03-after-typed.png" }
+  ]
+}

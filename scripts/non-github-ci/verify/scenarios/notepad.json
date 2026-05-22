@@ -1,0 +1,16 @@
+{
+  "outDir": "%OUTDIR%",
+  "initDpiAware": true,
+  "windowMatch": { "titleContains": "Notepad" },
+  "steps": [
+    { "op": "screenshot", "name": "01-before.png", "backend": "" },
+    { "op": "screenshot", "name": "01b-printwindow.png", "backend": "printwindow" },
+    { "op": "move",   "x": 100, "y": 100, "delayMs": 200 },
+    { "op": "resize", "w": 800, "h": 600, "delayMs": 200 },
+    { "op": "screenshot", "name": "02-after-move-resize.png" },
+    { "op": "focus",  "delayMs": 100 },
+    { "op": "click",  "x": 50,  "y": 80, "button": "left", "delayMs": 200 },
+    { "op": "type",   "text": "deskact selftest hello", "delayMs": 200 },
+    { "op": "screenshot", "name": "03-after-typed.png" }
+  ]
+}
