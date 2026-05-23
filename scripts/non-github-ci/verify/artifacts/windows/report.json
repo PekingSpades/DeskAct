@@ -1,0 +1,90 @@
+{
+  "platform": "windows",
+  "target": {
+    "windowId": 393750,
+    "pid": 5932,
+    "title": "Untitled - Notepad",
+    "x": 85,
+    "y": 78,
+    "w": 946,
+    "h": 482
+  },
+  "steps": [
+    {
+      "op": "screenshot",
+      "ok": true,
+      "elapsedMs": 536,
+      "png": "00-wgc-strict.png",
+      "backendUsed": "wgc"
+    },
+    {
+      "op": "screenshot",
+      "ok": true,
+      "elapsedMs": 139,
+      "png": "01-before.png",
+      "backendUsed": "wgc"
+    },
+    {
+      "op": "screenshot",
+      "ok": true,
+      "elapsedMs": 42,
+      "png": "01b-printwindow.png",
+      "backendUsed": "printwindow"
+    },
+    {
+      "op": "move",
+      "ok": true,
+      "elapsedMs": 201
+    },
+    {
+      "op": "resize",
+      "ok": true,
+      "elapsedMs": 201
+    },
+    {
+      "op": "screenshot",
+      "ok": true,
+      "elapsedMs": 135,
+      "png": "02-after-move-resize.png",
+      "backendUsed": "wgc"
+    },
+    {
+      "op": "click",
+      "ok": true,
+      "elapsedMs": 200
+    },
+    {
+      "op": "type",
+      "ok": true,
+      "elapsedMs": 200
+    },
+    {
+      "op": "screenshot",
+      "ok": true,
+      "elapsedMs": 127,
+      "png": "03-after-typed.png",
+      "backendUsed": "wgc"
+    },
+    {
+      "op": "occlude",
+      "ok": true,
+      "elapsedMs": 1665,
+      "detail": "spawned notepad.exe pid=3044 windowID=0x800d6 covering (85,78 946x482)"
+    },
+    {
+      "op": "screenshot",
+      "ok": true,
+      "elapsedMs": 131,
+      "png": "04-occluded-wgc.png",
+      "backendUsed": "wgc"
+    },
+    {
+      "op": "screenshot",
+      "ok": true,
+      "elapsedMs": 109,
+      "png": "04b-occluded-default.png",
+      "backendUsed": "wgc"
+    }
+  ],
+  "ok": true
+}

@@ -51,6 +51,11 @@ package-lock.json
 
 # Non-GitHub CI artifacts and VM state
 artifacts/
+# Exception: keep the verify selftest evidence (small report.json + PNGs,
+# used to cross-check VM runs against the committed scenarios so
+# reviewers can see actual results without re-running the VMs).
+!scripts/non-github-ci/verify/artifacts/
+!scripts/non-github-ci/verify/artifacts/**
 scripts/non-github-ci/.deskact-vms/
 .deskact-vms/
 bin/

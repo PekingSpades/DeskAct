@@ -87,6 +87,26 @@ type StepReport struct {
 	FallbackReason string `json:"fallbackReason,omitempty"`
 }
 
+// spawnedOccluders is the set of (pid, *os.Process) we launched via
+// op=occlude so cleanupSpawned can kill them when the selftest exits.
+// Leftover occluders are not just untidy — they have the same window
+// title as the legitimate target (e.g. "Untitled - Notepad"), so the
+// next run's windowMatch could grab the wrong window.
+var spawnedOccluders []*os.Process
+
+func cleanupSpawned() {
+	for _, p := range spawnedOccluders {
+		if p == nil {
+			continue
+		}
+		_ = p.Kill()
+		// Drain the child so it doesn't sit as a zombie. Ignored
+		// errors are expected when Kill races with normal exit.
+		_, _ = p.Wait()
+	}
+	spawnedOccluders = nil
+}
+
 func main() {
 	scenario, err := readScenario(os.Stdin)
 	if err != nil {
@@ -135,6 +155,10 @@ func main() {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(report)
+	// Kill any occluders we spawned before exiting so subsequent runs
+	// don't accidentally re-target our leftover window (titles like
+	// "Untitled - Notepad" overlap with the real target).
+	cleanupSpawned()
 	if !allOK {
 		os.Exit(2)
 	}
@@ -355,12 +379,12 @@ func runStep(s Scenario, t deskact.MouseWindowTarget, w deskact.WindowInfo, idx 
 		// Spawn a foreground window to cover the target. The next
 		// screenshot step exercises the "captured under occlusion"
 		// path that per-window WGC / XComposite / CGWindowList all
-		// promise. After spawning we look up the new process's window
-		// in the system window list and move it to the target's
-		// current bounds, so occlusion is actually provable instead
-		// of relying on the OS happening to place the new window over
-		// the target. Doesn't kill the spawned process — VMs are
-		// torn down between runs.
+		// promise. After spawning we look up the new window in the
+		// system window list and move it to the target's current
+		// bounds, so occlusion is actually provable instead of
+		// relying on the OS happening to place the new window over
+		// the target. cleanupSpawned() kills our children on exit so
+		// repeated runs don't accumulate matching-title windows.
 		cmd := step.Cmd
 		if cmd == "" {
 			cmd = defaultOccluderCmd()
@@ -370,21 +394,35 @@ func runStep(s Scenario, t deskact.MouseWindowTarget, w deskact.WindowInfo, idx 
 			sr.Err = "occlude: no command resolved"
 			return sr
 		}
+		// Snapshot the existing window set BEFORE spawn so we can
+		// pick out the new one even when the spawn goes through a
+		// launcher (`open -na TextEdit` on macOS exits immediately;
+		// c.Process.Pid is the short-lived `open` shim's PID, not
+		// TextEdit's). Matching by PID alone misses that case.
+		before := map[uint64]bool{}
+		if wins, lerr := deskact.ListWindows(deskact.WindowOptions{}); lerr == nil {
+			for _, x := range wins {
+				before[x.ID] = true
+			}
+		}
 		c := exec.Command(parts[0], parts[1:]...)
 		if err := c.Start(); err != nil {
 			sr.Err = fmt.Sprintf("spawn %q: %v", cmd, err)
 			return sr
 		}
+		spawnedOccluders = append(spawnedOccluders, c.Process)
 		newPID := c.Process.Pid
-		// Poll briefly for the spawned process to register a top-level
-		// window. ~2s should cover Notepad / xterm / TextEdit cold-
-		// start; longer would just delay the next step's settle.
+		// Poll briefly for a new top-level window to appear. ~2s
+		// covers Notepad / xterm / TextEdit cold-start.
 		var coverID uint64
 		var coverPID int
 		deadline := time.Now().Add(2 * time.Second)
 		for time.Now().Before(deadline) {
 			wins, lerr := deskact.ListWindows(deskact.WindowOptions{})
 			if lerr == nil {
+				// First preference: a window owned by the PID we
+				// spawned (works for direct binary launches like
+				// notepad.exe and xterm).
 				for _, candidate := range wins {
 					if candidate.PID == newPID && candidate.ID != w.ID {
 						coverID = candidate.ID
@@ -392,14 +430,41 @@ func runStep(s Scenario, t deskact.MouseWindowTarget, w deskact.WindowInfo, idx 
 						break
 					}
 				}
-			}
-			if coverID != 0 {
-				break
+				if coverID != 0 {
+					break
+				}
+				// Second preference: the highest-PID new window
+				// that wasn't in the pre-spawn snapshot. This is
+				// the macOS-launcher path — `open -na TextEdit`
+				// returns immediately but TextEdit comes up under
+				// a fresh, higher PID a moment later.
+				var bestID uint64
+				var bestPID int
+				for _, candidate := range wins {
+					if before[candidate.ID] || candidate.ID == w.ID {
+						continue
+					}
+					if candidate.PID > bestPID {
+						bestPID = candidate.PID
+						bestID = candidate.ID
+					}
+				}
+				if bestID != 0 {
+					coverID = bestID
+					coverPID = bestPID
+					// Track the actual app's process so cleanup
+					// can kill it. The launcher process we
+					// already appended will already have died.
+					if p, perr := os.FindProcess(bestPID); perr == nil {
+						spawnedOccluders = append(spawnedOccluders, p)
+					}
+					break
+				}
 			}
 			time.Sleep(150 * time.Millisecond)
 		}
 		if coverID == 0 {
-			sr.Err = fmt.Sprintf("spawned %s pid=%d but its window did not register in ListWindows within 2s — cannot prove occlusion", parts[0], newPID)
+			sr.Err = fmt.Sprintf("spawned %s pid=%d but no new window registered in ListWindows within 2s — cannot prove occlusion", parts[0], newPID)
 			return sr
 		}
 		// Position the cover over the target's last-known bounds. Use

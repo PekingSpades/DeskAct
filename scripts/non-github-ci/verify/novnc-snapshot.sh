@@ -61,13 +61,32 @@ if [[ -z "${port}" ]]; then
   esac
 fi
 
-# Prefer vncsnapshot (most reliable).
+# Prefer vncsnapshot (most reliable). It writes JPEG regardless of the
+# output file extension; convert to PNG when the caller asked for one so
+# the file's bytes match the extension (the in-tree validation step also
+# only accepts a PNG-magic prefix).
 if command -v vncsnapshot >/dev/null 2>&1; then
   echo "[novnc-snapshot] using vncsnapshot host=${host} port=${port}"
   echo -n "${password}" > /tmp/.deskact-vncpass-$$
   trap 'rm -f /tmp/.deskact-vncpass-$$' EXIT
-  vncsnapshot -passwd /tmp/.deskact-vncpass-$$ \
-    "${host}::${port}" "${out_file}"
+  case "${out_file}" in
+    *.png|*.PNG)
+      if ! command -v convert >/dev/null 2>&1; then
+        echo "vncsnapshot writes JPEG; install ImageMagick (convert) to" >&2
+        echo "produce a true PNG at ${out_file}, or pass --out something.jpg" >&2
+        exit 5
+      fi
+      tmp_jpg="$(mktemp --suffix=.jpg)"
+      vncsnapshot -passwd /tmp/.deskact-vncpass-$$ \
+        "${host}::${port}" "${tmp_jpg}"
+      convert "${tmp_jpg}" "${out_file}"
+      rm -f "${tmp_jpg}"
+      ;;
+    *)
+      vncsnapshot -passwd /tmp/.deskact-vncpass-$$ \
+        "${host}::${port}" "${out_file}"
+      ;;
+  esac
   exit $?
 fi
 
@@ -83,7 +102,17 @@ if command -v ffmpeg >/dev/null 2>&1; then
   exit 0
 fi
 
+# Manual fallback. The dockur noVNC web port is NOT a fixed offset from
+# the VNC port; it's a separate service on container port 8006 mapped to
+# DESKACT_*_WEB_PORT (defaults 8026 Windows, 8027 macOS in
+# docker-compose.yml). Earlier versions of this hint computed
+# port-394 which gave nonsense for either platform.
+case "${target}" in
+  windows) web="${DESKACT_WINDOWS_WEB_PORT:-8026}";;
+  macos)   web="${DESKACT_MACOS_WEB_PORT:-8027}";;
+  *)       web="?";;
+esac
 echo "neither vncsnapshot nor ffmpeg-with-vnc is available." >&2
-echo "manual fallback: open http://${host}:$(($port - 394)) (the dockur noVNC port)" >&2
+echo "manual fallback: open http://${host}:${web} (the dockur noVNC port for ${target})" >&2
 echo "                 and use your browser's screenshot facility." >&2
 exit 4

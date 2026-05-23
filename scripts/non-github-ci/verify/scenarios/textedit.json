@@ -6,9 +6,10 @@
     { "op": "move",   "x": 120, "y": 120, "delayMs": 250 },
     { "op": "resize", "w": 700, "h": 500, "delayMs": 250 },
     { "op": "screenshot", "name": "02-after-move-resize.png" },
-    { "op": "focus",  "delayMs": 150 },
     { "op": "click",  "x": 60,  "y": 100, "button": "left", "delayMs": 250 },
     { "op": "type",   "text": "deskact selftest", "delayMs": 250 },
-    { "op": "screenshot", "name": "03-after-typed.png" }
+    { "op": "screenshot", "name": "03-after-typed.png" },
+    { "op": "occlude", "delayMs": 2000 },
+    { "op": "screenshot", "name": "04-occluded.png" }
   ]
 }
