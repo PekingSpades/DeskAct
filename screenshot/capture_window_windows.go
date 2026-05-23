@@ -4,7 +4,7 @@
 package screenshot
 
 /*
-#cgo CXXFLAGS: -std=c++17 -DWIN32_LEAN_AND_MEAN -DNOMINMAX
+#cgo CFLAGS: -DWIN32_LEAN_AND_MEAN -DNOMINMAX
 #cgo LDFLAGS: -ld3d11 -ldxgi -ldxguid -lwindowsapp -lruntimeobject -lole32 -loleaut32 -luuid -lgdi32 -luser32
 
 #include "windows_wgc.h"

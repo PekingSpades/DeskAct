@@ -1,7 +1,8 @@
 // Copyright (c) 2016-2025 AtomAI, All rights reserved.
 //
-// windows_wgc.h - flat C ABI for the Windows.Graphics.Capture C++ wrapper.
-// The implementation lives in windows_wgc.cpp.
+// windows_wgc.h - flat C ABI for the Windows.Graphics.Capture wrapper.
+// Implementation in windows_wgc.c (C, not C++, to keep working with
+// mingw-w64's WinRT ABI headers).
 
 #ifndef WINDOWS_WGC_H
 #define WINDOWS_WGC_H
