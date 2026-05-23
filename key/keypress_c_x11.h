@@ -280,12 +280,16 @@ void unicodeType(const unsigned value, uintptr pid, int8_t isPid) {
  * specified window without taking global focus. Falls back to the
  * focus-stealing toggleKey() path when xid == 0.
  *
+ * Returns the first non-OK status from the underlying keyToggleXID
+ * calls (or MM_KEY_OK on success) so the Go layer can surface real
+ * delivery failures instead of swallowing them.
+ *
  * For codepoints >= 0x100, X11 represents them via the Unicode keysym
  * convention (0x01000000 | codepoint). Below that, the keysym equals
  * the ASCII codepoint; uppercase letters need MOD_SHIFT so the target
  * window sees the right case.
  */
-void unicodeTypeXID(const unsigned value, uintptr xid) {
+int unicodeTypeXID(const unsigned value, uintptr xid) {
 	unsigned long keysym;
 	if (value < 0x80) {
 		keysym = (unsigned long)value;
@@ -297,14 +301,19 @@ void unicodeTypeXID(const unsigned value, uintptr xid) {
 		flags |= MOD_SHIFT;
 	}
 	if (xid != 0) {
-		keyToggleXID((MMKeyCode)keysym, true, flags, (unsigned long)xid);
+		int rc = keyToggleXID((MMKeyCode)keysym, true, flags, (unsigned long)xid);
+		if (rc != MM_KEY_OK) return rc;
 		microsleep(5.0);
-		keyToggleXID((MMKeyCode)keysym, false, flags, (unsigned long)xid);
-	} else {
-		toggleKey((char)value, true, flags, 0);
-		microsleep(5.0);
-		toggleKey((char)value, false, flags, 0);
+		rc = keyToggleXID((MMKeyCode)keysym, false, flags, (unsigned long)xid);
+		if (rc != MM_KEY_OK) return rc;
+		return MM_KEY_OK;
 	}
+	// xid==0: focus-stealing fallback. toggleKey is void, so we can only
+	// report best-effort success here.
+	toggleKey((char)value, true, flags, 0);
+	microsleep(5.0);
+	toggleKey((char)value, false, flags, 0);
+	return MM_KEY_OK;
 }
 
 int input_utf(const char *utf) {

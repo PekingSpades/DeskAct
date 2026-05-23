@@ -12,12 +12,16 @@ import (
 // than "the default fell back to PrintWindow". Partial=true means the image
 // was returned but is known to be imperfect (e.g. PrintWindow blank-frame
 // from a window that wouldn't render), with Err holding the reason. OK
-// results have Partial=false and Err=nil.
+// results have Partial=false and Err=nil. FallbackReason captures the
+// error from the originally-requested backend when the default mode
+// silently fell back (e.g. WGC failed -> PrintWindow ran). Empty when
+// no fallback occurred.
 type CaptureWindowResult struct {
-	Image       *image.RGBA
-	BackendUsed cap.CaptureBackend
-	Partial     bool
-	Err         error
+	Image          *image.RGBA
+	BackendUsed    cap.CaptureBackend
+	Partial        bool
+	Err            error
+	FallbackReason string
 }
 
 // CaptureWindow takes a screenshot of a specific window, including pixels

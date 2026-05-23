@@ -3,6 +3,7 @@
   "initDpiAware": true,
   "windowMatch": { "titleContains": "Notepad" },
   "steps": [
+    { "op": "screenshot", "name": "00-wgc-strict.png", "backend": "wgc" },
     { "op": "screenshot", "name": "01-before.png", "backend": "" },
     { "op": "screenshot", "name": "01b-printwindow.png", "backend": "printwindow" },
     { "op": "move",   "x": 100, "y": 100, "delayMs": 200 },

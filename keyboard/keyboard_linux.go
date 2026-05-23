@@ -13,7 +13,7 @@ package keyboard
 // X11), MMKeyFlags is `unsigned int`, and uintptr is uintptr_t.
 int keyTapPid(unsigned long code, unsigned int flags, uintptr_t xid);
 int keyTogglePid(unsigned long code, bool down, unsigned int flags, uintptr_t xid);
-void unicodeTypeXID(unsigned value, uintptr_t xid);
+int unicodeTypeXID(unsigned value, uintptr_t xid);
 */
 import "C"
 
@@ -64,8 +64,13 @@ func keyToggleForWindowTarget(key string, down bool, xid int, modifiers []Modifi
 }
 
 // unicodeTypeXIDPlatform delivers a unicode codepoint to the given X11
-// Window XID via XSendEvent (no global focus disturbance).
+// Window XID via XSendEvent (no global focus disturbance). Surfaces the
+// underlying keyToggleXID return so callers see real delivery failures
+// (XSendEvent returning False, X display unavailable, keysym unmapped).
 func unicodeTypeXIDPlatform(value uint32, xid uint64) error {
-	C.unicodeTypeXID(C.uint(value), C.uintptr_t(xid))
-	return nil
+	rc := C.unicodeTypeXID(C.uint(value), C.uintptr_t(xid))
+	if rc == 0 {
+		return nil
+	}
+	return keyActionError("unicodeTypeXID", string(rune(value)), int(xid), rc)
 }

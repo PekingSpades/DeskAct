@@ -70,14 +70,15 @@ type TargetReport struct {
 }
 
 type StepReport struct {
-	Op          string `json:"op"`
-	OK          bool   `json:"ok"`
-	Err         string `json:"err,omitempty"`
-	ElapsedMs   int64  `json:"elapsedMs"`
-	PNG         string `json:"png,omitempty"`
-	Detail      string `json:"detail,omitempty"`
-	BackendUsed string `json:"backendUsed,omitempty"`
-	Partial     bool   `json:"partial,omitempty"`
+	Op             string `json:"op"`
+	OK             bool   `json:"ok"`
+	Err            string `json:"err,omitempty"`
+	ElapsedMs      int64  `json:"elapsedMs"`
+	PNG            string `json:"png,omitempty"`
+	Detail         string `json:"detail,omitempty"`
+	BackendUsed    string `json:"backendUsed,omitempty"`
+	Partial        bool   `json:"partial,omitempty"`
+	FallbackReason string `json:"fallbackReason,omitempty"`
 }
 
 func main() {
@@ -218,6 +219,7 @@ func runStep(s Scenario, t deskact.MouseWindowTarget, w deskact.WindowInfo, idx 
 		}
 		res := deskact.CaptureWindowEx(req)
 		sr.BackendUsed = string(res.BackendUsed)
+		sr.FallbackReason = res.FallbackReason
 		if res.Image == nil {
 			if res.Err != nil {
 				sr.Err = res.Err.Error()

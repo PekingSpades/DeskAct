@@ -46,3 +46,7 @@ func hwndByPIDPlatform(pid int) uint64 {
 
 // xidByPIDPlatform is X11-only; on Windows MoveWithPID never calls it.
 func xidByPIDPlatform(pid int) uint64 { return 0 }
+
+// frontWindowIDByPIDPlatform is macOS-only; on Windows MoveWithPID never
+// calls it (hwndByPIDPlatform covers the Windows path).
+func frontWindowIDByPIDPlatform(pid int) uint64 { return 0 }

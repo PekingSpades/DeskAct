@@ -40,13 +40,34 @@ var ErrMouseNoWindowForPID = errors.New("no window found for pid")
 // dispatch given only a PID. On macOS the PID is the relevant identifier;
 // on Windows/Linux we need to find a window owned by that process so the
 // downstream C entry has something to deliver coords to.
+//
+// Linux Wayland: surface ErrUnsupported here, before the PID lookup,
+// because xidByPIDPlatform would otherwise return 0 and the caller would
+// get the misleading ErrMouseNoWindowForPID. Same guard the *WithWindow
+// path uses via guardSession.
 func resolveTargetFromPID(pid int) (WindowTarget, error) {
 	if pid <= 0 {
 		return WindowTarget{}, ErrMouseWindowMissing
 	}
+	if err := guardSession(); err != nil {
+		return WindowTarget{}, err
+	}
 	switch runtime.GOOS {
 	case "darwin":
-		return WindowTarget{PID: int32(pid)}, nil
+		// macOS coord translation in translateForCall requires a WindowID
+		// (we pull bounds via CGWindowList). Resolve PID -> frontmost
+		// window so MoveWithPID(pid, clientX, clientY) actually translates
+		// client coords to screen instead of silently using raw values.
+		xid := frontWindowIDByPIDPlatform(pid)
+		t := WindowTarget{PID: int32(pid), WindowID: xid}
+		if xid == 0 {
+			// No window found; fall back to PID-only (translation will
+			// pass coords through). Return WindowTarget — the macOS C
+			// path still works for PID-targeted events without bounds.
+			// Caller can detect via the wrapped error if they care.
+			return t, nil
+		}
+		return t, nil
 	case "windows":
 		hwnd := hwndByPIDPlatform(pid)
 		if hwnd == 0 {

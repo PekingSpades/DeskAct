@@ -146,12 +146,16 @@ func captureWindowPlatformEx(req cap.WindowRequest) CaptureWindowResult {
 				Err:         fmt.Errorf("WGC capture failed (strict mode, no fallback): %w", wgcErr),
 			}
 		}
-		// Default mode: fall back to PrintWindow.
+		// Default mode: fall back to PrintWindow but carry the WGC error
+		// in FallbackReason so the report tells the user WHY WGC didn't
+		// run (e.g. "WGC runtime unavailable" on Server SKUs).
 		img, pwErr := capturePrintWindow(req.WindowID)
-		res := CaptureWindowResult{Image: img, BackendUsed: cap.CaptureBackendPrintWindow}
+		res := CaptureWindowResult{
+			Image:          img,
+			BackendUsed:    cap.CaptureBackendPrintWindow,
+			FallbackReason: wgcErr.Error(),
+		}
 		if pwErr != nil {
-			// capturePrintWindow may return img + err for blank frames;
-			// surface that as partial.
 			if img != nil {
 				res.Partial = true
 				res.Err = pwErr

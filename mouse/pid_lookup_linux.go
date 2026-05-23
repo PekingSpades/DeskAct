@@ -76,3 +76,6 @@ func matchesPID(c *xgb.Conn, win xproto.Window, pidAtom xproto.Atom, want uint32
 
 // hwndByPIDPlatform is Windows-only; on Linux MoveWithPID never calls it.
 func hwndByPIDPlatform(pid int) uint64 { return 0 }
+
+// frontWindowIDByPIDPlatform is macOS-only.
+func frontWindowIDByPIDPlatform(pid int) uint64 { return 0 }
