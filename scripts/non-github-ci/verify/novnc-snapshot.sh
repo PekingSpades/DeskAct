@@ -49,7 +49,13 @@ fi
 
 if [[ -z "${port}" ]]; then
   case "${target}" in
-    windows) port="${DESKACT_WINDOWS_RDP_PORT:-3400}";;
+    # Windows + macOS both expose QEMU's raw VNC (port 5900 inside the
+    # container). docker-compose maps Windows to host 5920 and macOS to
+    # 5921 by default. Override with DESKACT_WINDOWS_VNC_PORT /
+    # DESKACT_MACOS_VNC_PORT. (3400 / 3389 is RDP, not VNC, and would
+    # produce nonsense if fed to vncsnapshot — earlier versions of this
+    # script defaulted to it on Windows by mistake.)
+    windows) port="${DESKACT_WINDOWS_VNC_PORT:-5920}";;
     macos)   port="${DESKACT_MACOS_VNC_PORT:-5921}";;
     *) echo "unknown target ${target}" >&2; exit 64;;
   esac

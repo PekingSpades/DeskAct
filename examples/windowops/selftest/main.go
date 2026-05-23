@@ -197,20 +197,21 @@ func runStep(s Scenario, t deskact.MouseWindowTarget, w deskact.WindowInfo, idx 
 	sr = StepReport{Op: step.Op}
 
 	defer func() {
-		sr.ElapsedMs = time.Since(start).Milliseconds()
 		// DelayMs is a post-op settle: most window-management ops
 		// (move/resize/focus/click) are asynchronous on Windows and X11
 		// — the WM applies the change some time after PostMessage /
 		// XSendEvent returns. Sleeping AFTER the op gives the WM time
 		// to settle before the next step (typically a screenshot or
 		// another input event) takes its measurement. Pre-op sleeps
-		// would let races bleed across step boundaries; post-op sleeps
-		// also still show up in sr.ElapsedMs (intentional) so the
-		// caller sees the real wall-clock the op cost. "sleep" itself
-		// is its own kind of post-op delay so we skip the double-sleep.
+		// would let races bleed across step boundaries. We sleep here
+		// BEFORE computing ElapsedMs so the reported wall-clock
+		// includes the settle — otherwise a 0ms PostMessage with a
+		// 200ms settle would falsely look free. "sleep" is its own
+		// kind of post-op delay so we skip the double-sleep.
 		if step.Op != "sleep" && step.DelayMs > 0 {
 			time.Sleep(time.Duration(step.DelayMs) * time.Millisecond)
 		}
+		sr.ElapsedMs = time.Since(start).Milliseconds()
 	}()
 
 	switch step.Op {
@@ -398,16 +399,14 @@ func runStep(s Scenario, t deskact.MouseWindowTarget, w deskact.WindowInfo, idx 
 			time.Sleep(150 * time.Millisecond)
 		}
 		if coverID == 0 {
-			sr.Detail = fmt.Sprintf("spawned %s pid=%d but its window did not appear in time; occlusion may be best-effort", parts[0], newPID)
-			sr.OK = true
+			sr.Err = fmt.Sprintf("spawned %s pid=%d but its window did not register in ListWindows within 2s — cannot prove occlusion", parts[0], newPID)
 			return sr
 		}
 		// Position the cover over the target's last-known bounds. Use
 		// WindowMoveResize so a single op handles both.
 		bx, by, bw, bh := w.Bounds.X, w.Bounds.Y, w.Bounds.W, w.Bounds.H
 		if err := deskact.WindowMoveResize(coverID, int32(coverPID), bx, by, bw, bh); err != nil {
-			sr.Detail = fmt.Sprintf("spawned %s pid=%d windowID=0x%x; move-resize over target failed: %v", parts[0], newPID, coverID, err)
-			sr.OK = true
+			sr.Err = fmt.Sprintf("spawned %s pid=%d windowID=0x%x; move-resize over target failed: %v — cannot prove occlusion", parts[0], newPID, coverID, err)
 			return sr
 		}
 		// Raise the cover to make sure it's actually in front.

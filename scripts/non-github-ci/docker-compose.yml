@@ -24,6 +24,12 @@ services:
       - "${DESKACT_WINDOWS_WEB_PORT:-8026}:8006"
       - "${DESKACT_WINDOWS_RDP_PORT:-3400}:3389/tcp"
       - "${DESKACT_WINDOWS_RDP_PORT:-3400}:3389/udp"
+      # Raw VNC of QEMU's display. Needed by novnc-snapshot.sh and any
+      # vncsnapshot / vncdotool client driving the guest from the host.
+      # dockur exposes this internally as 5900; we forward to a host
+      # port that doesn't collide with the macOS 5921.
+      - "${DESKACT_WINDOWS_VNC_PORT:-5920}:5900/tcp"
+      - "${DESKACT_WINDOWS_VNC_PORT:-5920}:5900/udp"
     volumes:
       - "${DESKACT_WINDOWS_STORAGE:-./.deskact-vms/windows}:/storage"
       - "./oem/windows:/oem:ro"
