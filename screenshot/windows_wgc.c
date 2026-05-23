@@ -96,7 +96,6 @@ typedef HRESULT (WINAPI *PFN_CreateDirect3D11DeviceFromDXGIDevice)(IDXGIDevice*,
 static struct {
     HMODULE combase;
     HMODULE d3d11;
-    HMODULE capdll;
     PFN_RoInitialize RoInitialize_;
     PFN_RoGetActivationFactory RoGetActivationFactory_;
     PFN_WindowsCreateString WindowsCreateString_;
@@ -127,9 +126,20 @@ static int load_runtime(void) {
         LeaveCriticalSection(&g_rt.lock);
         return rc == 1 ? 0 : -2;
     }
+    /* Only combase and d3d11 are real prerequisites: combase exposes the
+     * RoInitialize / RoGetActivationFactory entry points that WinRT
+     * activation goes through, and d3d11 provides the texture path used
+     * for the readback. Windows.Graphics.Capture.dll is NOT loaded
+     * manually here — WinRT activation looks the runtime class up via
+     * the registry and loads whatever DLL the system maps the class to
+     * (which can vary by SKU and feature install). Requiring an explicit
+     * LoadLibraryW on that filename produced false-negatives on at
+     * least one Server SKU that was missing the file at the canonical
+     * path even though activation could still have succeeded if we tried;
+     * trust RoGetActivationFactory in wgc_capture_window to be the real
+     * source of truth. */
     g_rt.combase = LoadLibraryW(L"combase.dll");
     g_rt.d3d11   = LoadLibraryW(L"d3d11.dll");
-    g_rt.capdll  = LoadLibraryW(L"Windows.Graphics.Capture.dll");
 
     if (g_rt.combase) {
         g_rt.RoInitialize_           = (PFN_RoInitialize)(void*)GetProcAddress(g_rt.combase, "RoInitialize");
@@ -141,7 +151,7 @@ static int load_runtime(void) {
         g_rt.CreateDirect3D11DeviceFromDXGIDevice_ =
             (PFN_CreateDirect3D11DeviceFromDXGIDevice)(void*)GetProcAddress(g_rt.d3d11, "CreateDirect3D11DeviceFromDXGIDevice");
     }
-    int ok = (g_rt.combase && g_rt.d3d11 && g_rt.capdll
+    int ok = (g_rt.combase && g_rt.d3d11
         && g_rt.RoInitialize_ && g_rt.RoGetActivationFactory_
         && g_rt.WindowsCreateString_ && g_rt.WindowsDeleteString_
         && g_rt.CreateDirect3D11DeviceFromDXGIDevice_) ? 1 : 0;
@@ -151,6 +161,11 @@ static int load_runtime(void) {
 }
 
 int wgc_available(void) {
+    /* "Available" here means the WinRT activation pipeline is plumbed;
+     * it does NOT guarantee that the GraphicsCaptureItem class is
+     * registered on the host. The real determination happens in
+     * wgc_capture_window when RoGetActivationFactory either succeeds
+     * or returns REGDB_E_CLASSNOTREG. */
     return load_runtime() == 0 ? 1 : 0;
 }
 

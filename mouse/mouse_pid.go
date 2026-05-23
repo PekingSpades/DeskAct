@@ -17,12 +17,19 @@ import (
 //
 // The fields each platform actually uses:
 //
-//   - Windows: WindowID is the HWND (uintptr cast).
-//   - macOS:   PID is the owning process id; WindowID is informational only.
-//   - Linux X11: WindowID is the X11 Window XID.
+//   - Windows:   WindowID is the HWND (uintptr cast). PID is unused by
+//                the dispatch; callers may leave it zero.
+//   - macOS:     PID is the owning process id for CGEventPostToPid.
+//                WindowID is ALSO required when the caller passes
+//                client-relative coordinates — translateForCall reads
+//                the window's screen bounds via CGWindowList to map
+//                client (x, y) to global screen coords. Leave WindowID
+//                zero only when you're already supplying screen coords.
+//   - Linux X11: WindowID is the X11 Window XID. PID is unused by the
+//                dispatch; callers may leave it zero.
 //
 // Callers running cross-platform code should fill both fields when they
-// know them — the implementation only reads what its platform needs.
+// know them — the implementation reads what its platform needs.
 type WindowTarget struct {
 	WindowID uint64
 	PID      int32
@@ -54,20 +61,16 @@ func resolveTargetFromPID(pid int) (WindowTarget, error) {
 	}
 	switch runtime.GOOS {
 	case "darwin":
-		// macOS coord translation in translateForCall requires a WindowID
-		// (we pull bounds via CGWindowList). Resolve PID -> frontmost
-		// window so MoveWithPID(pid, clientX, clientY) actually translates
-		// client coords to screen instead of silently using raw values.
+		// macOS coord translation in translateForCall pulls the target's
+		// bounds via CGWindowList; without a WindowID it would silently
+		// pass client coords through as if they were screen coords.
+		// Treat "no front window" as a hard miss — same shape as
+		// Windows/Linux when no window owns the PID.
 		xid := frontWindowIDByPIDPlatform(pid)
-		t := WindowTarget{PID: int32(pid), WindowID: xid}
 		if xid == 0 {
-			// No window found; fall back to PID-only (translation will
-			// pass coords through). Return WindowTarget — the macOS C
-			// path still works for PID-targeted events without bounds.
-			// Caller can detect via the wrapped error if they care.
-			return t, nil
+			return WindowTarget{}, ErrMouseNoWindowForPID
 		}
-		return t, nil
+		return WindowTarget{PID: int32(pid), WindowID: xid}, nil
 	case "windows":
 		hwnd := hwndByPIDPlatform(pid)
 		if hwnd == 0 {
