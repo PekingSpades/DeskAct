@@ -45,6 +45,7 @@ type ScenarioOp struct {
 	Button  string `json:"button"`
 	Text    string `json:"text"`
 	DelayMs int    `json:"delayMs"`
+	Ms      int    `json:"ms"` // used by op=sleep
 	Backend string `json:"backend"`
 	Sub     string `json:"sub"`
 	Name    string `json:"name"`
@@ -183,7 +184,9 @@ func findTarget(m WindowMatch) (deskact.MouseWindowTarget, deskact.WindowInfo, e
 }
 
 func runStep(s Scenario, t deskact.MouseWindowTarget, w deskact.WindowInfo, idx int, step ScenarioOp) (sr StepReport) {
-	if step.DelayMs > 0 {
+	// op=sleep uses Ms (matches plan); the generic pre-op DelayMs is skipped
+	// for sleep so the step does not sleep twice.
+	if step.Op != "sleep" && step.DelayMs > 0 {
 		time.Sleep(time.Duration(step.DelayMs) * time.Millisecond)
 	}
 	start := time.Now()
@@ -195,8 +198,11 @@ func runStep(s Scenario, t deskact.MouseWindowTarget, w deskact.WindowInfo, idx 
 
 	switch step.Op {
 	case "sleep":
-		// extra sleep beyond delayMs
-		time.Sleep(time.Duration(step.DelayMs) * time.Millisecond)
+		ms := step.Ms
+		if ms == 0 {
+			ms = step.DelayMs
+		}
+		time.Sleep(time.Duration(ms) * time.Millisecond)
 		sr.OK = true
 	case "screenshot":
 		backend := deskact.CaptureBackendDefault
@@ -251,14 +257,14 @@ func runStep(s Scenario, t deskact.MouseWindowTarget, w deskact.WindowInfo, idx 
 		sr.OK = true
 	case "type":
 		for _, r := range step.Text {
-			if err := deskact.KeyTapWithPID(string(r), int(t.WindowID), nil, deskact.DefaultKeyboardSettings()); err != nil {
-				sr.Err = fmt.Sprintf("KeyTapWithPID(%q): %v", string(r), err)
+			if err := deskact.KeyTapWithWindow(string(r), t.WindowID, int(t.PID), nil, deskact.DefaultKeyboardSettings()); err != nil {
+				sr.Err = fmt.Sprintf("KeyTapWithWindow(%q): %v", string(r), err)
 				return sr
 			}
 		}
 		sr.OK = true
 	case "key":
-		if err := deskact.KeyTapWithPID(step.Text, int(t.WindowID), nil, deskact.DefaultKeyboardSettings()); err != nil {
+		if err := deskact.KeyTapWithWindow(step.Text, t.WindowID, int(t.PID), nil, deskact.DefaultKeyboardSettings()); err != nil {
 			sr.Err = err.Error()
 			return sr
 		}

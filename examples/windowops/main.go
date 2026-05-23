@@ -213,7 +213,7 @@ func (s *state) cmdType() {
 	start := time.Now()
 	settings := deskact.DefaultKeyboardSettings()
 	for _, r := range text {
-		if err := deskact.KeyTapWithPID(string(r), int(w.ID), nil, settings); err != nil {
+		if err := deskact.KeyTapWithWindow(string(r), w.ID, w.PID, nil, settings); err != nil {
 			fmt.Printf("op=type win=%d ok=false at=%q err=%v\n", w.ID, string(r), err)
 			return
 		}

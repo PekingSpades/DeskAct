@@ -220,6 +220,19 @@ func KeyToggleWithPID(key string, down bool, pid int, modifiers []Modifier, sett
 	return kbd.KeyToggleWithPID(key, down, pid, modifiers, settings)
 }
 
+// KeyTapWithWindow taps a key targeting a specific window, picking the
+// platform-correct identifier from the supplied (windowID, pid) pair:
+// HWND on Windows, X11 Window XID on Linux, PID on macOS. See the
+// keyboard package godoc for details.
+func KeyTapWithWindow(key string, windowID uint64, pid int, modifiers []Modifier, settings KeyboardSettings) error {
+	return kbd.KeyTapWithWindow(key, windowID, pid, modifiers, settings)
+}
+
+// KeyToggleWithWindow is the per-window analogue of KeyToggleWithPID.
+func KeyToggleWithWindow(key string, down bool, windowID uint64, pid int, modifiers []Modifier, settings KeyboardSettings) error {
+	return kbd.KeyToggleWithWindow(key, down, windowID, pid, modifiers, settings)
+}
+
 func KeyPress(key string, modifiers []Modifier, settings KeyboardSettings) error {
 	return kbd.KeyPress(key, modifiers, settings)
 }
