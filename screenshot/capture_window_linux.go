@@ -21,8 +21,6 @@ typedef struct {
     int height;
     int stride;
     int status;  // 0=ok, 1=display unavailable, 2=no composite ext, 3=window not found, 4=capture failed
-    int needsUnredirect;
-    unsigned long pixmap;
 } XCompShot;
 
 static void xcompshot_free(XCompShot* s) {
@@ -32,60 +30,66 @@ static void xcompshot_free(XCompShot* s) {
     }
 }
 
+// Long-lived display connection used so that the COMPOSITE redirects below
+// stay in effect across consecutive captures of the same window. The
+// Composite extension scopes redirects to the requesting client; closing
+// the X connection unredirects every previously-redirected window.
+// linux_capture_open() lazily opens the display on first use; it is OK to
+// call repeatedly.
+static Display *g_dpy = NULL;
+static int      g_have_composite = 0;
+
+static int linux_capture_open(void) {
+    if (g_dpy != NULL) return 0;
+    Display *d = XOpenDisplay(NULL);
+    if (d == NULL) return 1;
+    int event_base, error_base;
+    if (!XCompositeQueryExtension(d, &event_base, &error_base)) {
+        XCloseDisplay(d);
+        return 2;
+    }
+    g_dpy = d;
+    g_have_composite = 1;
+    return 0;
+}
+
 // Capture the offscreen pixmap that the Composite extension keeps for any
-// redirected window. We REDIRECT_AUTOMATIC the window if needed (some WMs
-// already redirect to enable compositing; that's idempotent and observed by
-// XCompositeRedirectWindow returning success).
-//
-// On older non-compositing setups this call will still succeed when the
-// composite extension is loaded, because Composite v0.4+ supports
-// per-window redirection regardless of root compositing state.
+// redirected window. Redirects are only requested once per window — once
+// CompositeRedirectAutomatic has been set on the shared client, the
+// X server keeps the offscreen backbuffer in sync until the connection
+// drops (which we never do).
 static XCompShot capture_window_xcomposite(unsigned long xid) {
     XCompShot out;
     memset(&out, 0, sizeof(out));
     out.status = 4;
 
-    Display* dpy = XOpenDisplay(NULL);
-    if (dpy == NULL) {
-        out.status = 1;
-        return out;
-    }
-
-    int event_base, error_base;
-    if (!XCompositeQueryExtension(dpy, &event_base, &error_base)) {
-        XCloseDisplay(dpy);
-        out.status = 2;
-        return out;
-    }
+    int rc = linux_capture_open();
+    if (rc != 0) { out.status = rc; return out; }
 
     XWindowAttributes attrs;
-    if (!XGetWindowAttributes(dpy, (Window)xid, &attrs)) {
-        XCloseDisplay(dpy);
+    if (!XGetWindowAttributes(g_dpy, (Window)xid, &attrs)) {
         out.status = 3;
         return out;
     }
     if (attrs.width <= 0 || attrs.height <= 0) {
-        XCloseDisplay(dpy);
         out.status = 4;
         return out;
     }
 
-    // Redirect to offscreen storage if not already.
-    XCompositeRedirectWindow(dpy, (Window)xid, CompositeRedirectAutomatic);
-    XSync(dpy, False);
+    // Idempotent: if the window is already redirected by this client the
+    // server silently increments a reference count.
+    XCompositeRedirectWindow(g_dpy, (Window)xid, CompositeRedirectAutomatic);
+    XSync(g_dpy, False);
 
-    Pixmap pix = XCompositeNameWindowPixmap(dpy, (Window)xid);
+    Pixmap pix = XCompositeNameWindowPixmap(g_dpy, (Window)xid);
     if (pix == 0) {
-        XCompositeUnredirectWindow(dpy, (Window)xid, CompositeRedirectAutomatic);
-        XCloseDisplay(dpy);
         out.status = 4;
         return out;
     }
 
-    XImage* xi = XGetImage(dpy, pix, 0, 0, attrs.width, attrs.height, AllPlanes, ZPixmap);
-    XFreePixmap(dpy, pix);
+    XImage* xi = XGetImage(g_dpy, pix, 0, 0, attrs.width, attrs.height, AllPlanes, ZPixmap);
+    XFreePixmap(g_dpy, pix);
     if (xi == NULL) {
-        XCloseDisplay(dpy);
         out.status = 4;
         return out;
     }
@@ -96,12 +100,10 @@ static XCompShot capture_window_xcomposite(unsigned long xid) {
     uint8_t* buf = (uint8_t*)calloc((size_t)(stride * h), 1);
     if (buf == NULL) {
         XDestroyImage(xi);
-        XCloseDisplay(dpy);
         out.status = 4;
         return out;
     }
 
-    // XGetImage with TrueColor/24bit visual returns BGRA. Convert to RGBA.
     int bpp = xi->bits_per_pixel / 8;
     if (bpp < 3) bpp = 4;
     for (int y = 0; y < h; y++) {
@@ -119,7 +121,6 @@ static XCompShot capture_window_xcomposite(unsigned long xid) {
     }
 
     XDestroyImage(xi);
-    XCloseDisplay(dpy);
 
     out.data = buf;
     out.width = w;
@@ -135,6 +136,7 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"sync"
 	"unsafe"
 
 	cap "github.com/PekingSpades/DeskAct/capture"
@@ -146,6 +148,12 @@ func isWaylandSession() bool {
 	}
 	return os.Getenv("XDG_SESSION_TYPE") == "wayland"
 }
+
+// captureMu serialises access to the shared X display g_dpy in the C
+// translation unit. Xlib is not thread-safe by default unless XInitThreads
+// is called, and several goroutines could otherwise race on the same
+// connection.
+var captureMu sync.Mutex
 
 func captureWindowPlatform(req cap.WindowRequest) (*image.RGBA, error) {
 	if isWaylandSession() {
@@ -162,7 +170,9 @@ func captureWindowPlatform(req cap.WindowRequest) (*image.RGBA, error) {
 		return nil, cap.ErrWindowNotFound
 	}
 
+	captureMu.Lock()
 	shot := C.capture_window_xcomposite(C.ulong(req.WindowID))
+	captureMu.Unlock()
 	defer C.xcompshot_free(&shot)
 	switch shot.status {
 	case 1:
