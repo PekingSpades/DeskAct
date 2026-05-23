@@ -26,5 +26,5 @@
 - 已知限制（写进 godoc 与 PR description）：
   - Wayland 与未知 session：所有 per-window 入口返回 `capture.ErrUnsupported`。
   - macOS 窗口操作首次会请求 Accessibility 授权；未授权返回 `capture.ErrPermissionDenied`。
-  - Windows WGC C++ wrapper 当前为运行时 stub；构建期已通过 worker env 修通，运行时自动回退到 `PrintWindow(PW_RENDERFULLCONTENT)`。原因记录在 `screenshot/windows_wgc.cpp` 顶部注释（mingw-w64 13.x 的 WinRT ABI 头与 `__mingw_uuidof<>` 模板冲突，需要走 C ABI/COBJMACROS 路径重写）。
+  - Windows WGC 是默认主后端（`screenshot/windows_wgc.c`，基于 COBJMACROS + INITGUID 的 C 实现，使用 `TryGetNextFrame` 轮询而非 `FrameArrived` 事件）；当 `wgc_available()` 返回 0（运行时 DLL 缺失）或某个 HWND 上 WGC 返回非 0 状态时自动回退到 `PrintWindow(PW_RENDERFULLCONTENT)`。
   - X11 `XSendEvent` 的 `send_event` 标记会被部分 GTK/Qt 应用过滤。

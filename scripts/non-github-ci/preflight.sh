@@ -106,6 +106,24 @@ if [[ "${include_vms}" == "1" ]]; then
     warn "docker compose plugin is unavailable"
     missing=1
   fi
+
+  # Explicitly prime the dockur images so the first build invocation does
+  # not block on a multi-GB pull. `docker compose up -d` would pull
+  # implicitly, but the plan requires this to be a separate, observable
+  # step so operators see the download cost up-front.
+  if [[ "${missing}" == "0" ]]; then
+    compose_file="${SCRIPT_DIR}/docker-compose.yml"
+    if [[ -f "${compose_file}" ]]; then
+      log "pulling dockur Windows image (this may be multi-GB on first run)"
+      if ! docker compose -f "${compose_file}" pull windows; then
+        warn "docker compose pull windows failed; the first VM build will retry the download"
+      fi
+      log "pulling dockur macOS image (profile macos)"
+      if ! docker compose -f "${compose_file}" --profile macos pull macos; then
+        warn "docker compose pull macos failed; the first VM build will retry the download"
+      fi
+    fi
+  fi
 fi
 
 if [[ "${missing}" != "0" ]]; then
