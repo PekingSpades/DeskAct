@@ -117,4 +117,3 @@ if [[ "${rc}" != "0" ]]; then
   echo "selftest reported errors; see ${report_path}" >&2
 fi
 exit "${rc}"
-
