@@ -45,13 +45,72 @@ static int mouseWindowButtonMessages(MMMouseButton button, int down,
 	return MM_MOUSE_PID_OK;
 }
 
+/*
+ * childAtClientPoint: when a click coord lands inside a child control
+ * (a button, edit box, list view item, …), PostMessage to the top-level
+ * parent will not be routed to that child by the system — the parent's
+ * own WindowProc receives the message and most apps drop it. Use
+ * ChildWindowFromPointEx to find the deepest visible, non-transparent
+ * child at the supplied client-relative point, and recurse so we land
+ * on the actual leaf control rather than a container. Falls back to
+ * `parent` when the point is outside any child or the call fails so the
+ * caller still gets a target HWND.
+ *
+ * Coords supplied are already client-relative to `parent`, so we walk
+ * by translating into each successive child's client space.
+ */
+static HWND childAtClientPoint(HWND parent, int clientX, int clientY) {
+	if (parent == NULL) return parent;
+	HWND cur = parent;
+	int curX = clientX;
+	int curY = clientY;
+	/* Bounded loop in case of a sibling cycle from a buggy app. */
+	for (int depth = 0; depth < 32; depth++) {
+		POINT pt = { (LONG)curX, (LONG)curY };
+		HWND child = ChildWindowFromPointEx(cur, pt,
+			CWP_SKIPINVISIBLE | CWP_SKIPTRANSPARENT | CWP_SKIPDISABLED);
+		if (child == NULL || child == cur) {
+			return cur;
+		}
+		/* Translate the point from `cur`'s client space into `child`'s
+		 * client space before recursing. ScreenToClient handles that
+		 * after a quick ClientToScreen round-trip. */
+		POINT scr = pt;
+		if (!ClientToScreen(cur, &scr)) {
+			return child;
+		}
+		POINT inChild = scr;
+		if (!ScreenToClient(child, &inChild)) {
+			return child;
+		}
+		cur = child;
+		curX = (int)inChild.x;
+		curY = (int)inChild.y;
+	}
+	return cur;
+}
+
 /* Move the mouse cursor (virtual to this window only) by sending WM_MOUSEMOVE. */
 static int mouseMovePidGo(uintptr_t hwnd, int x, int y) {
 	if (hwnd == 0) {
 		return MM_MOUSE_PID_ERR_WINDOW;
 	}
-	LPARAM lparam = MAKELPARAM((SHORT)x, (SHORT)y);
-	if (!PostMessageW((HWND)hwnd, WM_MOUSEMOVE, 0, lparam)) {
+	HWND target = childAtClientPoint((HWND)hwnd, x, y);
+	POINT pt = { (LONG)x, (LONG)y };
+	if (target != (HWND)hwnd) {
+		/* Translate the user's (x, y) (in `hwnd` client space) into the
+		 * child's client space so WM_MOUSEMOVE lParam matches what a
+		 * real cursor would report at that pixel. */
+		POINT scr = pt;
+		if (ClientToScreen((HWND)hwnd, &scr)) {
+			POINT inChild = scr;
+			if (ScreenToClient(target, &inChild)) {
+				pt = inChild;
+			}
+		}
+	}
+	LPARAM lparam = MAKELPARAM((SHORT)pt.x, (SHORT)pt.y);
+	if (!PostMessageW(target, WM_MOUSEMOVE, 0, lparam)) {
 		return MM_MOUSE_PID_ERR_POST;
 	}
 	return MM_MOUSE_PID_OK;
@@ -69,9 +128,20 @@ static int mouseTogglePidGo(uintptr_t hwnd, int x, int y, MMMouseButton button, 
 	if (rc != MM_MOUSE_PID_OK) {
 		return rc;
 	}
+	HWND target = childAtClientPoint((HWND)hwnd, x, y);
+	POINT pt = { (LONG)x, (LONG)y };
+	if (target != (HWND)hwnd) {
+		POINT scr = pt;
+		if (ClientToScreen((HWND)hwnd, &scr)) {
+			POINT inChild = scr;
+			if (ScreenToClient(target, &inChild)) {
+				pt = inChild;
+			}
+		}
+	}
 	WPARAM wparam = buttonFlag | extra;
-	LPARAM lparam = MAKELPARAM((SHORT)x, (SHORT)y);
-	if (!PostMessageW((HWND)hwnd, msg, wparam, lparam)) {
+	LPARAM lparam = MAKELPARAM((SHORT)pt.x, (SHORT)pt.y);
+	if (!PostMessageW(target, msg, wparam, lparam)) {
 		return MM_MOUSE_PID_ERR_POST;
 	}
 	return MM_MOUSE_PID_OK;

@@ -12,6 +12,9 @@
     { "op": "focus",  "delayMs": 100 },
     { "op": "click",  "x": 50,  "y": 80, "button": "left", "delayMs": 200 },
     { "op": "type",   "text": "deskact selftest hello", "delayMs": 200 },
-    { "op": "screenshot", "name": "03-after-typed.png" }
+    { "op": "screenshot", "name": "03-after-typed.png" },
+    { "op": "occlude", "delayMs": 1500 },
+    { "op": "screenshot", "name": "04-occluded-wgc.png", "backend": "wgc" },
+    { "op": "screenshot", "name": "04b-occluded-default.png" }
   ]
 }

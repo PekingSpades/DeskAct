@@ -1,12 +1,21 @@
 package window
 
 import (
-	"errors"
+	"fmt"
 
+	cap "github.com/PekingSpades/DeskAct/capture"
 	"github.com/PekingSpades/DeskAct/display"
 )
 
-var ErrUnsupported = errors.New("window listing is not supported on this platform")
+// ErrUnsupported is returned when a per-window listing or ops entry point
+// is invoked on a session that cannot service it (Wayland today, missing
+// DISPLAY, etc.). It wraps capture.ErrUnsupported so callers can use
+// errors.Is(err, capture.ErrUnsupported) against any per-window error
+// from the deskact surface (capture, window, mouse, keyboard) and not
+// have to special-case window.ErrUnsupported separately. Docs in
+// AGENTS.md describe this as the single sentinel for "the platform
+// can't do this".
+var ErrUnsupported = fmt.Errorf("%w: window operation not supported on this platform", cap.ErrUnsupported)
 
 // WindowOptions defines options for listing windows.
 type WindowOptions struct {

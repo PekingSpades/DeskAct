@@ -12,6 +12,7 @@ import (
 	"image"
 	"image/png"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -49,6 +50,11 @@ type ScenarioOp struct {
 	Backend string `json:"backend"`
 	Sub     string `json:"sub"`
 	Name    string `json:"name"`
+	// op=occlude only. Command line of the auxiliary process spawned to
+	// cover the target so the next screenshot exercises occluded capture.
+	// Defaults per platform: notepad on Windows, xterm on Linux. macOS:
+	// open -na TextEdit. Tokenized by ' '; no shell quoting.
+	Cmd string `json:"cmd"`
 }
 
 type Report struct {
@@ -187,16 +193,24 @@ func findTarget(m WindowMatch) (deskact.MouseWindowTarget, deskact.WindowInfo, e
 }
 
 func runStep(s Scenario, t deskact.MouseWindowTarget, w deskact.WindowInfo, idx int, step ScenarioOp) (sr StepReport) {
-	// op=sleep uses Ms (matches plan); the generic pre-op DelayMs is skipped
-	// for sleep so the step does not sleep twice.
-	if step.Op != "sleep" && step.DelayMs > 0 {
-		time.Sleep(time.Duration(step.DelayMs) * time.Millisecond)
-	}
 	start := time.Now()
 	sr = StepReport{Op: step.Op}
 
 	defer func() {
 		sr.ElapsedMs = time.Since(start).Milliseconds()
+		// DelayMs is a post-op settle: most window-management ops
+		// (move/resize/focus/click) are asynchronous on Windows and X11
+		// — the WM applies the change some time after PostMessage /
+		// XSendEvent returns. Sleeping AFTER the op gives the WM time
+		// to settle before the next step (typically a screenshot or
+		// another input event) takes its measurement. Pre-op sleeps
+		// would let races bleed across step boundaries; post-op sleeps
+		// also still show up in sr.ElapsedMs (intentional) so the
+		// caller sees the real wall-clock the op cost. "sleep" itself
+		// is its own kind of post-op delay so we skip the double-sleep.
+		if step.Op != "sleep" && step.DelayMs > 0 {
+			time.Sleep(time.Duration(step.DelayMs) * time.Millisecond)
+		}
 	}()
 
 	switch step.Op {
@@ -336,10 +350,86 @@ func runStep(s Scenario, t deskact.MouseWindowTarget, w deskact.WindowInfo, idx 
 			return sr
 		}
 		sr.OK = true
+	case "occlude":
+		// Spawn a foreground window to cover the target. The next
+		// screenshot step exercises the "captured under occlusion"
+		// path that per-window WGC / XComposite / CGWindowList all
+		// promise. After spawning we look up the new process's window
+		// in the system window list and move it to the target's
+		// current bounds, so occlusion is actually provable instead
+		// of relying on the OS happening to place the new window over
+		// the target. Doesn't kill the spawned process — VMs are
+		// torn down between runs.
+		cmd := step.Cmd
+		if cmd == "" {
+			cmd = defaultOccluderCmd()
+		}
+		parts := strings.Fields(cmd)
+		if len(parts) == 0 {
+			sr.Err = "occlude: no command resolved"
+			return sr
+		}
+		c := exec.Command(parts[0], parts[1:]...)
+		if err := c.Start(); err != nil {
+			sr.Err = fmt.Sprintf("spawn %q: %v", cmd, err)
+			return sr
+		}
+		newPID := c.Process.Pid
+		// Poll briefly for the spawned process to register a top-level
+		// window. ~2s should cover Notepad / xterm / TextEdit cold-
+		// start; longer would just delay the next step's settle.
+		var coverID uint64
+		var coverPID int
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			wins, lerr := deskact.ListWindows(deskact.WindowOptions{})
+			if lerr == nil {
+				for _, candidate := range wins {
+					if candidate.PID == newPID && candidate.ID != w.ID {
+						coverID = candidate.ID
+						coverPID = candidate.PID
+						break
+					}
+				}
+			}
+			if coverID != 0 {
+				break
+			}
+			time.Sleep(150 * time.Millisecond)
+		}
+		if coverID == 0 {
+			sr.Detail = fmt.Sprintf("spawned %s pid=%d but its window did not appear in time; occlusion may be best-effort", parts[0], newPID)
+			sr.OK = true
+			return sr
+		}
+		// Position the cover over the target's last-known bounds. Use
+		// WindowMoveResize so a single op handles both.
+		bx, by, bw, bh := w.Bounds.X, w.Bounds.Y, w.Bounds.W, w.Bounds.H
+		if err := deskact.WindowMoveResize(coverID, int32(coverPID), bx, by, bw, bh); err != nil {
+			sr.Detail = fmt.Sprintf("spawned %s pid=%d windowID=0x%x; move-resize over target failed: %v", parts[0], newPID, coverID, err)
+			sr.OK = true
+			return sr
+		}
+		// Raise the cover to make sure it's actually in front.
+		_ = deskact.WindowRaise(coverID, int32(coverPID))
+		sr.Detail = fmt.Sprintf("spawned %s pid=%d windowID=0x%x covering (%d,%d %dx%d)", parts[0], newPID, coverID, bx, by, bw, bh)
+		sr.OK = true
 	default:
 		sr.Err = "unknown op: " + step.Op
 	}
 	return sr
+}
+
+func defaultOccluderCmd() string {
+	switch runtime.GOOS {
+	case "windows":
+		return "notepad.exe"
+	case "linux":
+		return "xterm -title deskact-occluder -geometry 100x40+0+0"
+	case "darwin":
+		return "open -na TextEdit"
+	}
+	return ""
 }
 
 func buttonOf(s string) deskact.MouseButton {
