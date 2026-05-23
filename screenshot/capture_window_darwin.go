@@ -102,27 +102,32 @@ import (
 )
 
 func captureWindowPlatform(req cap.WindowRequest) (*image.RGBA, error) {
+	res := captureWindowPlatformEx(req)
+	return res.Image, res.Err
+}
+
+func captureWindowPlatformEx(req cap.WindowRequest) CaptureWindowResult {
 	backend := req.Options.Backend
 	if backend == cap.CaptureBackendDefault {
 		backend = cap.CaptureBackendCGWindowList
 	}
 	if backend != cap.CaptureBackendCGWindowList {
-		return nil, fmt.Errorf("%w: backend %q is not supported for per-window capture on darwin", cap.ErrCaptureBackendUnavailable, backend)
+		return CaptureWindowResult{Err: fmt.Errorf("%w: backend %q is not supported for per-window capture on darwin", cap.ErrCaptureBackendUnavailable, backend)}
 	}
 	if req.WindowID == 0 {
-		return nil, cap.ErrWindowNotFound
+		return CaptureWindowResult{Err: cap.ErrWindowNotFound}
 	}
 
 	shot := C.capture_window_cglist(C.uint32_t(req.WindowID))
 	defer C.winshot_free(&shot)
 	switch shot.status {
 	case 1:
-		return nil, fmt.Errorf("%w: cgwindow id=%d", cap.ErrWindowNotFound, req.WindowID)
+		return CaptureWindowResult{BackendUsed: cap.CaptureBackendCGWindowList, Err: fmt.Errorf("%w: cgwindow id=%d", cap.ErrWindowNotFound, req.WindowID)}
 	case 2:
-		return nil, fmt.Errorf("%w: CGWindowListCreateImage returned nil for id=%d", cap.ErrCaptureFailed, req.WindowID)
+		return CaptureWindowResult{BackendUsed: cap.CaptureBackendCGWindowList, Err: fmt.Errorf("%w: CGWindowListCreateImage returned nil for id=%d", cap.ErrCaptureFailed, req.WindowID)}
 	}
 	if shot.data == nil || shot.width <= 0 || shot.height <= 0 {
-		return nil, fmt.Errorf("%w: empty image for id=%d", cap.ErrCaptureFailed, req.WindowID)
+		return CaptureWindowResult{BackendUsed: cap.CaptureBackendCGWindowList, Err: fmt.Errorf("%w: empty image for id=%d", cap.ErrCaptureFailed, req.WindowID)}
 	}
 
 	w := int(shot.width)
@@ -132,5 +137,5 @@ func captureWindowPlatform(req cap.WindowRequest) (*image.RGBA, error) {
 
 	src := unsafe.Slice((*byte)(unsafe.Pointer(shot.data)), stride*h)
 	copy(img.Pix, src)
-	return img, nil
+	return CaptureWindowResult{Image: img, BackendUsed: cap.CaptureBackendCGWindowList}
 }

@@ -116,26 +116,66 @@ import (
 )
 
 func captureWindowPlatform(req cap.WindowRequest) (*image.RGBA, error) {
+	res := captureWindowPlatformEx(req)
+	return res.Image, res.Err
+}
+
+func captureWindowPlatformEx(req cap.WindowRequest) CaptureWindowResult {
 	if req.WindowID == 0 {
-		return nil, cap.ErrWindowNotFound
+		return CaptureWindowResult{Err: cap.ErrWindowNotFound}
 	}
 
-	backend := req.Options.Backend
+	requested := req.Options.Backend
+	backend := requested
 	if backend == cap.CaptureBackendDefault {
 		backend = cap.CaptureBackendWGC
 	}
 
 	switch backend {
 	case cap.CaptureBackendWGC:
-		if img, err := tryWGC(req.WindowID); err == nil {
-			return img, nil
+		img, wgcErr := tryWGC(req.WindowID)
+		if wgcErr == nil {
+			return CaptureWindowResult{Image: img, BackendUsed: cap.CaptureBackendWGC}
 		}
-		// fall through to PrintWindow on any WGC failure
-		return capturePrintWindow(req.WindowID)
+		// Strict mode: when the caller explicitly asked for WGC, do NOT
+		// silently fall back to PrintWindow — report the WGC failure
+		// truthfully so "WGC verified" claims can be checked.
+		if requested == cap.CaptureBackendWGC {
+			return CaptureWindowResult{
+				BackendUsed: cap.CaptureBackendWGC,
+				Err:         fmt.Errorf("WGC capture failed (strict mode, no fallback): %w", wgcErr),
+			}
+		}
+		// Default mode: fall back to PrintWindow.
+		img, pwErr := capturePrintWindow(req.WindowID)
+		res := CaptureWindowResult{Image: img, BackendUsed: cap.CaptureBackendPrintWindow}
+		if pwErr != nil {
+			// capturePrintWindow may return img + err for blank frames;
+			// surface that as partial.
+			if img != nil {
+				res.Partial = true
+				res.Err = pwErr
+			} else {
+				res.Err = pwErr
+			}
+		}
+		return res
 	case cap.CaptureBackendPrintWindow:
-		return capturePrintWindow(req.WindowID)
+		img, err := capturePrintWindow(req.WindowID)
+		res := CaptureWindowResult{Image: img, BackendUsed: cap.CaptureBackendPrintWindow}
+		if err != nil {
+			if img != nil {
+				res.Partial = true
+				res.Err = err
+			} else {
+				res.Err = err
+			}
+		}
+		return res
 	default:
-		return nil, fmt.Errorf("%w: backend %q is not supported on windows", cap.ErrCaptureBackendUnavailable, backend)
+		return CaptureWindowResult{
+			Err: fmt.Errorf("%w: backend %q is not supported on windows", cap.ErrCaptureBackendUnavailable, backend),
+		}
 	}
 }
 

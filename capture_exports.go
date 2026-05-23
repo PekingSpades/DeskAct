@@ -36,7 +36,22 @@ func CaptureScreen(req CaptureRequest) (*image.RGBA, error) {
 }
 
 // CaptureWindow takes a screenshot of a specific window, including pixels
-// that are occluded by other windows.
+// that are occluded by other windows. Use CaptureWindowEx if you also need
+// to know which backend produced the image or to distinguish OK from
+// partial results.
 func CaptureWindow(req CaptureWindowRequest) (*image.RGBA, error) {
 	return screenshot.CaptureWindow(req)
+}
+
+// CaptureWindowResult is the structured return of CaptureWindowEx.
+type CaptureWindowResult = screenshot.CaptureWindowResult
+
+// CaptureWindowEx is the structured form of CaptureWindow. Prefer this when
+// you want to record which backend ran or distinguish OK vs partial
+// results. When the caller explicitly asked for a non-default backend
+// (e.g. CaptureBackendWGC) and that backend fails, no fallback is
+// performed — the error surfaces truthfully so callers can verify the
+// requested code path.
+func CaptureWindowEx(req CaptureWindowRequest) CaptureWindowResult {
+	return screenshot.CaptureWindowEx(req)
 }

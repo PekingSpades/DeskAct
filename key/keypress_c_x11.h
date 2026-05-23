@@ -274,6 +274,39 @@ void unicodeType(const unsigned value, uintptr pid, int8_t isPid) {
 	toggleUniKey(value, false);
 }
 
+/*
+ * unicodeTypeXID - per-window unicode text input. Routes through the
+ * XSendEvent-based keyToggleXID so the keystroke is delivered to the
+ * specified window without taking global focus. Falls back to the
+ * focus-stealing toggleKey() path when xid == 0.
+ *
+ * For codepoints >= 0x100, X11 represents them via the Unicode keysym
+ * convention (0x01000000 | codepoint). Below that, the keysym equals
+ * the ASCII codepoint; uppercase letters need MOD_SHIFT so the target
+ * window sees the right case.
+ */
+void unicodeTypeXID(const unsigned value, uintptr xid) {
+	unsigned long keysym;
+	if (value < 0x80) {
+		keysym = (unsigned long)value;
+	} else {
+		keysym = 0x01000000UL | (unsigned long)value;
+	}
+	MMKeyFlags flags = MOD_NONE;
+	if (value < 0x80 && value >= 'A' && value <= 'Z') {
+		flags |= MOD_SHIFT;
+	}
+	if (xid != 0) {
+		keyToggleXID((MMKeyCode)keysym, true, flags, (unsigned long)xid);
+		microsleep(5.0);
+		keyToggleXID((MMKeyCode)keysym, false, flags, (unsigned long)xid);
+	} else {
+		toggleKey((char)value, true, flags, 0);
+		microsleep(5.0);
+		toggleKey((char)value, false, flags, 0);
+	}
+}
+
 int input_utf(const char *utf) {
 	Display *dpy = XOpenDisplay(NULL);
 	if (dpy == NULL) {

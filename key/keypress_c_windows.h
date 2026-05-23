@@ -92,15 +92,23 @@ static int postMessageChecked(HWND hwnd, int msg, WPARAM wParam, LPARAM lParam) 
  * (e.g. an Edit control inside a top-level window), return that descendant.
  * Otherwise return `hwnd` unchanged. Non-preemptive: GetGUIThreadInfo
  * reads cross-thread state without an AttachThreadInput.
+ *
+ * Guards against the multi-window-per-thread case: if the thread also
+ * owns an unrelated top-level (so hwndFocus may belong to it), only
+ * accept the focus if it is the same HWND as `hwnd` or a descendant of
+ * it (per IsChild). Falls back to `hwnd` when the focus is unrelated.
  */
 static HWND focusedChildOf(HWND hwnd) {
+	if (hwnd == NULL) return hwnd;
 	DWORD tid = GetWindowThreadProcessId(hwnd, NULL);
 	if (tid == 0) return hwnd;
 	GUITHREADINFO gti;
 	gti.cbSize = sizeof(gti);
 	if (!GetGUIThreadInfo(tid, &gti)) return hwnd;
 	if (gti.hwndFocus == NULL) return hwnd;
-	return gti.hwndFocus;
+	if (gti.hwndFocus == hwnd) return hwnd;
+	if (IsChild(hwnd, gti.hwndFocus)) return gti.hwndFocus;
+	return hwnd;
 }
 
 static int keyEventToHwnd(HWND hwnd, int key, DWORD flags) {

@@ -11,3 +11,7 @@ import (
 func captureWindowPlatform(req cap.WindowRequest) (*image.RGBA, error) {
 	return nil, cap.ErrUnsupported
 }
+
+func captureWindowPlatformEx(req cap.WindowRequest) CaptureWindowResult {
+	return CaptureWindowResult{Err: cap.ErrUnsupported}
+}

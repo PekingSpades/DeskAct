@@ -315,7 +315,11 @@ func KeyTap(key string, modifiers []Modifier, settings KeyboardSettings) error {
 	return keyActionError("keyTap", key, 0, ret)
 }
 
-// KeyTapWithPID taps the keyboard code on a specific process.
+// KeyTapWithPID taps the keyboard code on a specific process. On Linux X11
+// the underlying C entry expects an X11 Window XID, not a PID; this Go
+// wrapper resolves PID -> XID via _NET_WM_PID before dispatch, so callers
+// of KeyTapWithPID get true per-process behavior on every platform.
+// Returns ErrKeyWindowNotFound if no window can be resolved.
 func KeyTapWithPID(key string, pid int, modifiers []Modifier, settings KeyboardSettings) error {
 	if runtime.GOOS == "linux" && isWaylandSession() {
 		return fmt.Errorf("%w: wayland session — per-window keyboard injection requires X11", cap.ErrUnsupported)
@@ -329,8 +333,20 @@ func KeyTapWithPID(key string, pid int, modifiers []Modifier, settings KeyboardS
 
 	flags := modifiersToFlags(modifiers)
 
-	// PID-specific operation.
-	ret := C.keyTapPid(keyCode, flags, C.uintptr(pid))
+	target := pid
+	if runtime.GOOS == "linux" && pid > 0 {
+		xid := lookupXIDByPID(pid)
+		if xid == 0 {
+			return ErrKeyWindowNotFound
+		}
+		target = int(xid)
+	}
+
+	// PID-specific operation. On Linux `target` is the resolved XID; on
+	// macOS it is the actual PID; on Windows the C side treats this as
+	// a PID and runs GetHwndByPid() — use KeyTapWithWindow when you have
+	// an HWND.
+	ret := C.keyTapPid(keyCode, flags, C.uintptr(target))
 
 	milliSleep(settings.Sleep)
 	return keyActionError("keyTapPid", key, pid, ret)
@@ -354,7 +370,8 @@ func KeyToggle(key string, down bool, modifiers []Modifier, settings KeyboardSet
 	return keyActionError("keyToggle", key, 0, ret)
 }
 
-// KeyToggleWithPID toggles a key on a specific process.
+// KeyToggleWithPID toggles a key on a specific process. Like KeyTapWithPID,
+// resolves PID -> XID on Linux X11 before dispatch.
 func KeyToggleWithPID(key string, down bool, pid int, modifiers []Modifier, settings KeyboardSettings) error {
 	if runtime.GOOS == "linux" && isWaylandSession() {
 		return fmt.Errorf("%w: wayland session — per-window keyboard injection requires X11", cap.ErrUnsupported)
@@ -368,8 +385,16 @@ func KeyToggleWithPID(key string, down bool, pid int, modifiers []Modifier, sett
 
 	flags := modifiersToFlags(modifiers)
 
-	// PID-specific operation.
-	ret := C.keyTogglePid(keyCode, C.bool(down), flags, C.uintptr(pid))
+	target := pid
+	if runtime.GOOS == "linux" && pid > 0 {
+		xid := lookupXIDByPID(pid)
+		if xid == 0 {
+			return ErrKeyWindowNotFound
+		}
+		target = int(xid)
+	}
+
+	ret := C.keyTogglePid(keyCode, C.bool(down), flags, C.uintptr(target))
 
 	milliSleep(settings.Sleep)
 	return keyActionError("keyTogglePid", key, pid, ret)
@@ -474,7 +499,9 @@ func UnicodeType(str uint32, pid int, isPid bool) {
 // using the per-platform mechanism that actually delivers text input:
 //   - Windows: PostMessage(WM_CHAR) routed to the focused descendant of windowID.
 //   - macOS:   CGEventPostToPid with a synthetic unicode keyboard event.
-//   - Linux X11: XSendEvent against windowID (or the focused window if 0).
+//   - Linux X11: XSendEvent against windowID. Returns ErrKeyWindowNotFound
+//                if no identifier is supplied (we no longer silently fall
+//                back to global focus on Linux).
 //
 // This is the right call for "type this text" scenarios; for individual
 // virtual-key events (shortcuts, arrow keys) use KeyTapWithWindow.
@@ -494,8 +521,14 @@ func UnicodeTypeWithWindow(r rune, windowID uint64, pid int) error {
 		}
 		UnicodeType(uint32(r), pid, false)
 	case "linux":
-		// X11 unicodeType ignores both args and uses the global focus.
-		UnicodeType(uint32(r), 0, false)
+		xid := windowID
+		if xid == 0 && pid > 0 {
+			xid = uint64(lookupXIDByPID(pid))
+		}
+		if xid == 0 {
+			return ErrKeyWindowNotFound
+		}
+		return unicodeTypeXIDPlatform(uint32(r), xid)
 	}
 	return nil
 }

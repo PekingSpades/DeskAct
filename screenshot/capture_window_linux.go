@@ -39,6 +39,50 @@ static void xcompshot_free(XCompShot* s) {
 static Display *g_dpy = NULL;
 static int      g_have_composite = 0;
 
+// g_redirected is a small open-addressed hash set of XIDs we have already
+// asked the server to redirect. The X server refcounts redirects per
+// client, so calling XCompositeRedirectWindow more than once per (client,
+// xid) pair leaks a refcount that's only released when the connection
+// dies — wasting a bit of state and keeping the window redirected longer
+// than expected after the caller stops using us. Track membership so the
+// first capture of an xid sends the redirect and subsequent captures of
+// the same xid just hit the existing offscreen pixmap.
+#define REDIR_SET_CAP 4096
+static unsigned long g_redirected[REDIR_SET_CAP];
+static int           g_redirected_n = 0;
+
+static int redirect_set_contains(unsigned long xid) {
+    if (g_redirected_n == 0) return 0;
+    unsigned long h = (xid * 2654435761UL) % REDIR_SET_CAP;
+    for (int i = 0; i < REDIR_SET_CAP; i++) {
+        unsigned long idx = (h + i) % REDIR_SET_CAP;
+        unsigned long cur = g_redirected[idx];
+        if (cur == 0) return 0;
+        if (cur == xid) return 1;
+    }
+    return 0;
+}
+
+static void redirect_set_add(unsigned long xid) {
+    if (g_redirected_n >= REDIR_SET_CAP - 1) {
+        // Set is full — bail out and tolerate the extra refcount rather
+        // than getting stuck in an infinite probe loop. Hitting this
+        // means a session is tracking >4k distinct windows, well past
+        // any realistic deskact usage.
+        return;
+    }
+    unsigned long h = (xid * 2654435761UL) % REDIR_SET_CAP;
+    for (int i = 0; i < REDIR_SET_CAP; i++) {
+        unsigned long idx = (h + i) % REDIR_SET_CAP;
+        if (g_redirected[idx] == 0) {
+            g_redirected[idx] = xid;
+            g_redirected_n++;
+            return;
+        }
+        if (g_redirected[idx] == xid) return;
+    }
+}
+
 static int linux_capture_open(void) {
     if (g_dpy != NULL) return 0;
     Display *d = XOpenDisplay(NULL);
@@ -76,10 +120,15 @@ static XCompShot capture_window_xcomposite(unsigned long xid) {
         return out;
     }
 
-    // Idempotent: if the window is already redirected by this client the
-    // server silently increments a reference count.
-    XCompositeRedirectWindow(g_dpy, (Window)xid, CompositeRedirectAutomatic);
-    XSync(g_dpy, False);
+    // Only request a redirect on first capture of this xid. Repeated
+    // XCompositeRedirectWindow calls would each bump the server-side
+    // refcount; once we've redirected once the offscreen pixmap stays
+    // live for as long as our connection is open.
+    if (!redirect_set_contains(xid)) {
+        XCompositeRedirectWindow(g_dpy, (Window)xid, CompositeRedirectAutomatic);
+        XSync(g_dpy, False);
+        redirect_set_add(xid);
+    }
 
     Pixmap pix = XCompositeNameWindowPixmap(g_dpy, (Window)xid);
     if (pix == 0) {
@@ -156,18 +205,23 @@ func isWaylandSession() bool {
 var captureMu sync.Mutex
 
 func captureWindowPlatform(req cap.WindowRequest) (*image.RGBA, error) {
+	res := captureWindowPlatformEx(req)
+	return res.Image, res.Err
+}
+
+func captureWindowPlatformEx(req cap.WindowRequest) CaptureWindowResult {
 	if isWaylandSession() {
-		return nil, fmt.Errorf("%w: wayland session — per-window screenshot requires X11", cap.ErrUnsupported)
+		return CaptureWindowResult{Err: fmt.Errorf("%w: wayland session — per-window screenshot requires X11", cap.ErrUnsupported)}
 	}
 	backend := req.Options.Backend
 	if backend == cap.CaptureBackendDefault {
 		backend = cap.CaptureBackendXComposite
 	}
 	if backend != cap.CaptureBackendXComposite {
-		return nil, fmt.Errorf("%w: backend %q is not supported for per-window capture on linux", cap.ErrCaptureBackendUnavailable, backend)
+		return CaptureWindowResult{Err: fmt.Errorf("%w: backend %q is not supported for per-window capture on linux", cap.ErrCaptureBackendUnavailable, backend)}
 	}
 	if req.WindowID == 0 {
-		return nil, cap.ErrWindowNotFound
+		return CaptureWindowResult{Err: cap.ErrWindowNotFound}
 	}
 
 	captureMu.Lock()
@@ -176,16 +230,16 @@ func captureWindowPlatform(req cap.WindowRequest) (*image.RGBA, error) {
 	defer C.xcompshot_free(&shot)
 	switch shot.status {
 	case 1:
-		return nil, fmt.Errorf("%w: X display unavailable", cap.ErrUnsupported)
+		return CaptureWindowResult{BackendUsed: cap.CaptureBackendXComposite, Err: fmt.Errorf("%w: X display unavailable", cap.ErrUnsupported)}
 	case 2:
-		return nil, fmt.Errorf("%w: X Composite extension not present", cap.ErrUnsupported)
+		return CaptureWindowResult{BackendUsed: cap.CaptureBackendXComposite, Err: fmt.Errorf("%w: X Composite extension not present", cap.ErrUnsupported)}
 	case 3:
-		return nil, fmt.Errorf("%w: xid=0x%x", cap.ErrWindowNotFound, req.WindowID)
+		return CaptureWindowResult{BackendUsed: cap.CaptureBackendXComposite, Err: fmt.Errorf("%w: xid=0x%x", cap.ErrWindowNotFound, req.WindowID)}
 	case 4:
-		return nil, fmt.Errorf("%w: XComposite/XGetImage failed for xid=0x%x", cap.ErrCaptureFailed, req.WindowID)
+		return CaptureWindowResult{BackendUsed: cap.CaptureBackendXComposite, Err: fmt.Errorf("%w: XComposite/XGetImage failed for xid=0x%x", cap.ErrCaptureFailed, req.WindowID)}
 	}
 	if shot.data == nil || shot.width <= 0 || shot.height <= 0 {
-		return nil, fmt.Errorf("%w: empty image for xid=0x%x", cap.ErrCaptureFailed, req.WindowID)
+		return CaptureWindowResult{BackendUsed: cap.CaptureBackendXComposite, Err: fmt.Errorf("%w: empty image for xid=0x%x", cap.ErrCaptureFailed, req.WindowID)}
 	}
 
 	w := int(shot.width)
@@ -194,5 +248,5 @@ func captureWindowPlatform(req cap.WindowRequest) (*image.RGBA, error) {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	src := unsafe.Slice((*byte)(unsafe.Pointer(shot.data)), stride*h)
 	copy(img.Pix, src)
-	return img, nil
+	return CaptureWindowResult{Image: img, BackendUsed: cap.CaptureBackendXComposite}
 }

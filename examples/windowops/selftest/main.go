@@ -70,12 +70,14 @@ type TargetReport struct {
 }
 
 type StepReport struct {
-	Op        string `json:"op"`
-	OK        bool   `json:"ok"`
-	Err       string `json:"err,omitempty"`
-	ElapsedMs int64  `json:"elapsedMs"`
-	PNG       string `json:"png,omitempty"`
-	Detail    string `json:"detail,omitempty"`
+	Op          string `json:"op"`
+	OK          bool   `json:"ok"`
+	Err         string `json:"err,omitempty"`
+	ElapsedMs   int64  `json:"elapsedMs"`
+	PNG         string `json:"png,omitempty"`
+	Detail      string `json:"detail,omitempty"`
+	BackendUsed string `json:"backendUsed,omitempty"`
+	Partial     bool   `json:"partial,omitempty"`
 }
 
 func main() {
@@ -214,9 +216,14 @@ func runStep(s Scenario, t deskact.MouseWindowTarget, w deskact.WindowInfo, idx 
 			PID:      t.PID,
 			Options:  deskact.CaptureOptions{Backend: backend},
 		}
-		img, err := deskact.CaptureWindow(req)
-		if err != nil && img == nil {
-			sr.Err = err.Error()
+		res := deskact.CaptureWindowEx(req)
+		sr.BackendUsed = string(res.BackendUsed)
+		if res.Image == nil {
+			if res.Err != nil {
+				sr.Err = res.Err.Error()
+			} else {
+				sr.Err = "capture returned no image"
+			}
 			return sr
 		}
 		name := step.Name
@@ -224,13 +231,23 @@ func runStep(s Scenario, t deskact.MouseWindowTarget, w deskact.WindowInfo, idx 
 			name = fmt.Sprintf("step-%03d.png", idx)
 		}
 		path := filepath.Join(s.OutDir, name)
-		if e := writePNG(path, img); e != nil {
+		if e := writePNG(path, res.Image); e != nil {
 			sr.Err = fmt.Sprintf("write png: %v", e)
 			return sr
 		}
 		sr.PNG = path
-		if err != nil {
-			sr.Detail = fmt.Sprintf("partial: %v", err)
+		// Partial: image was returned but is known imperfect (e.g.
+		// PrintWindow blank-frame). Surface as not-OK so callers can't
+		// mistake "we wrote a PNG" for "the requested capture worked".
+		if res.Partial {
+			sr.Partial = true
+			sr.Detail = fmt.Sprintf("partial: %v", res.Err)
+			sr.Err = res.Err.Error()
+			return sr
+		}
+		if res.Err != nil {
+			sr.Err = res.Err.Error()
+			return sr
 		}
 		sr.OK = true
 	case "click":

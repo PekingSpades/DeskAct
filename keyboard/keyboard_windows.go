@@ -46,3 +46,10 @@ func keyToggleForWindowTarget(key string, down bool, hwnd int, modifiers []Modif
 	milliSleep(settings.Sleep)
 	return keyActionError("keyToggleHwnd", key, hwnd, ret)
 }
+
+// unicodeTypeXIDPlatform is X11-only; on Windows UnicodeTypeWithWindow
+// takes the windows branch and never calls this. Stub to keep the shared
+// keyboard.go compiling.
+func unicodeTypeXIDPlatform(value uint32, xid uint64) error {
+	return ErrKeyWindowNotFound
+}
