@@ -245,6 +245,14 @@ func UnicodeType(str uint32, pid int, isPid bool) {
 	kbd.UnicodeType(str, pid, isPid)
 }
 
+// UnicodeTypeWithWindow types a single unicode codepoint into the given
+// window, using the platform-correct mechanism (WM_CHAR on Windows,
+// CGEventPostToPid on macOS, XSendEvent on Linux X11). For shortcut keys
+// (Ctrl+S, arrows, F1) use KeyTapWithWindow instead.
+func UnicodeTypeWithWindow(r rune, windowID uint64, pid int) error {
+	return kbd.UnicodeTypeWithWindow(r, windowID, pid)
+}
+
 func ToUC(text string) []string {
 	return kbd.ToUC(text)
 }

@@ -394,7 +394,7 @@ func KeyTapWithWindow(key string, windowID uint64, pid int, modifiers []Modifier
 	if err != nil {
 		return err
 	}
-	return KeyTapWithPID(key, id, modifiers, settings)
+	return keyTapForWindowTarget(key, id, modifiers, settings)
 }
 
 // KeyToggleWithWindow is the per-window analogue of KeyToggleWithPID. See
@@ -407,7 +407,7 @@ func KeyToggleWithWindow(key string, down bool, windowID uint64, pid int, modifi
 	if err != nil {
 		return err
 	}
-	return KeyToggleWithPID(key, down, id, modifiers, settings)
+	return keyToggleForWindowTarget(key, down, id, modifiers, settings)
 }
 
 // keyboardWindowTarget reduces (windowID, pid) to the single int the
@@ -468,6 +468,36 @@ func UnicodeType(str uint32, pid int, isPid bool) {
 		isPidFlag = C.int8_t(1)
 	}
 	C.unicodeType(cstr, C.uintptr(pid), isPidFlag)
+}
+
+// UnicodeTypeWithWindow types a unicode codepoint into a specific window,
+// using the per-platform mechanism that actually delivers text input:
+//   - Windows: PostMessage(WM_CHAR) routed to the focused descendant of windowID.
+//   - macOS:   CGEventPostToPid with a synthetic unicode keyboard event.
+//   - Linux X11: XSendEvent against windowID (or the focused window if 0).
+//
+// This is the right call for "type this text" scenarios; for individual
+// virtual-key events (shortcuts, arrow keys) use KeyTapWithWindow.
+func UnicodeTypeWithWindow(r rune, windowID uint64, pid int) error {
+	if runtime.GOOS == "linux" && isWaylandSession() {
+		return fmt.Errorf("%w: wayland session — per-window text input requires X11", cap.ErrUnsupported)
+	}
+	switch runtime.GOOS {
+	case "windows":
+		if windowID == 0 {
+			return ErrKeyWindowNotFound
+		}
+		UnicodeType(uint32(r), int(windowID), true)
+	case "darwin":
+		if pid == 0 {
+			return ErrKeyWindowNotFound
+		}
+		UnicodeType(uint32(r), pid, false)
+	case "linux":
+		// X11 unicodeType ignores both args and uses the global focus.
+		UnicodeType(uint32(r), 0, false)
+	}
+	return nil
 }
 
 // ToUC trans string to unicode []string.

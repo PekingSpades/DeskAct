@@ -257,8 +257,8 @@ func runStep(s Scenario, t deskact.MouseWindowTarget, w deskact.WindowInfo, idx 
 		sr.OK = true
 	case "type":
 		for _, r := range step.Text {
-			if err := deskact.KeyTapWithWindow(string(r), t.WindowID, int(t.PID), nil, deskact.DefaultKeyboardSettings()); err != nil {
-				sr.Err = fmt.Sprintf("KeyTapWithWindow(%q): %v", string(r), err)
+			if err := deskact.UnicodeTypeWithWindow(r, t.WindowID, int(t.PID)); err != nil {
+				sr.Err = fmt.Sprintf("UnicodeTypeWithWindow(%q): %v", string(r), err)
 				return sr
 			}
 		}

@@ -87,9 +87,25 @@ static int postMessageChecked(HWND hwnd, int msg, WPARAM wParam, LPARAM lParam) 
 	return MM_KEY_OK;
 }
 
+/*
+ * focusedChildOf: if `hwnd` has a focused descendant in the same UI thread
+ * (e.g. an Edit control inside a top-level window), return that descendant.
+ * Otherwise return `hwnd` unchanged. Non-preemptive: GetGUIThreadInfo
+ * reads cross-thread state without an AttachThreadInput.
+ */
+static HWND focusedChildOf(HWND hwnd) {
+	DWORD tid = GetWindowThreadProcessId(hwnd, NULL);
+	if (tid == 0) return hwnd;
+	GUITHREADINFO gti;
+	gti.cbSize = sizeof(gti);
+	if (!GetGUIThreadInfo(tid, &gti)) return hwnd;
+	if (gti.hwndFocus == NULL) return hwnd;
+	return gti.hwndFocus;
+}
+
 static int keyEventToHwnd(HWND hwnd, int key, DWORD flags) {
 	int msg = (flags & KEYEVENTF_KEYUP) ? WM_KEYUP : WM_KEYDOWN;
-	return postMessageChecked(hwnd, msg, key, 0);
+	return postMessageChecked(focusedChildOf(hwnd), msg, key, 0);
 }
 
 /*
@@ -178,6 +194,65 @@ int keyTapPid(MMKeyCode code, MMKeyFlags flags, uintptr pid) {
 }
 
 /*
+ * keyTapHwnd - Key tap directly to an HWND (skips the PID->HWND lookup).
+ * Used by the per-window keyboard path where the caller already resolved
+ * the window. Behavior is otherwise identical to keyTapPid.
+ */
+int keyTapHwnd(MMKeyCode code, MMKeyFlags flags, uintptr hwndVal) {
+	HWND hwnd = getHwnd(hwndVal, 1);
+	int err = MM_KEY_OK;
+
+	if (hwnd == NULL) {
+		return MM_KEY_ERR_WINDOW;
+	}
+
+	if (flags & MOD_META) { err = keyEventToHwnd(hwnd, K_META, 0); if (err != MM_KEY_OK) return err; }
+	if (flags & MOD_ALT) { err = keyEventToHwnd(hwnd, K_ALT, 0); if (err != MM_KEY_OK) return err; }
+	if (flags & MOD_CONTROL) { err = keyEventToHwnd(hwnd, K_CONTROL, 0); if (err != MM_KEY_OK) return err; }
+	if (flags & MOD_SHIFT) { err = keyEventToHwnd(hwnd, K_SHIFT, 0); if (err != MM_KEY_OK) return err; }
+	err = keyEventToHwnd(hwnd, code, 0);
+	if (err != MM_KEY_OK) return err;
+
+	err = keyEventToHwnd(hwnd, code, KEYEVENTF_KEYUP);
+	if (err != MM_KEY_OK) return err;
+	if (flags & MOD_SHIFT) { err = keyEventToHwnd(hwnd, K_SHIFT, KEYEVENTF_KEYUP); if (err != MM_KEY_OK) return err; }
+	if (flags & MOD_CONTROL) { err = keyEventToHwnd(hwnd, K_CONTROL, KEYEVENTF_KEYUP); if (err != MM_KEY_OK) return err; }
+	if (flags & MOD_ALT) { err = keyEventToHwnd(hwnd, K_ALT, KEYEVENTF_KEYUP); if (err != MM_KEY_OK) return err; }
+	if (flags & MOD_META) { err = keyEventToHwnd(hwnd, K_META, KEYEVENTF_KEYUP); if (err != MM_KEY_OK) return err; }
+	return MM_KEY_OK;
+}
+
+/*
+ * keyToggleHwnd - keyTogglePid's HWND-direct counterpart. See keyTapHwnd.
+ */
+int keyToggleHwnd(MMKeyCode code, const bool down, MMKeyFlags flags, uintptr hwndVal) {
+	DWORD dwFlags = down ? 0 : KEYEVENTF_KEYUP;
+	HWND hwnd = getHwnd(hwndVal, 1);
+	int err = MM_KEY_OK;
+
+	if (hwnd == NULL) {
+		return MM_KEY_ERR_WINDOW;
+	}
+
+	if (down) {
+		if (flags & MOD_META) { err = keyEventToHwnd(hwnd, K_META, dwFlags); if (err != MM_KEY_OK) return err; }
+		if (flags & MOD_ALT) { err = keyEventToHwnd(hwnd, K_ALT, dwFlags); if (err != MM_KEY_OK) return err; }
+		if (flags & MOD_CONTROL) { err = keyEventToHwnd(hwnd, K_CONTROL, dwFlags); if (err != MM_KEY_OK) return err; }
+		if (flags & MOD_SHIFT) { err = keyEventToHwnd(hwnd, K_SHIFT, dwFlags); if (err != MM_KEY_OK) return err; }
+		err = keyEventToHwnd(hwnd, code, dwFlags);
+		if (err != MM_KEY_OK) return err;
+	} else {
+		err = keyEventToHwnd(hwnd, code, dwFlags);
+		if (err != MM_KEY_OK) return err;
+		if (flags & MOD_SHIFT) { err = keyEventToHwnd(hwnd, K_SHIFT, dwFlags); if (err != MM_KEY_OK) return err; }
+		if (flags & MOD_CONTROL) { err = keyEventToHwnd(hwnd, K_CONTROL, dwFlags); if (err != MM_KEY_OK) return err; }
+		if (flags & MOD_ALT) { err = keyEventToHwnd(hwnd, K_ALT, dwFlags); if (err != MM_KEY_OK) return err; }
+		if (flags & MOD_META) { err = keyEventToHwnd(hwnd, K_META, dwFlags); if (err != MM_KEY_OK) return err; }
+	}
+	return MM_KEY_OK;
+}
+
+/*
  * keyTogglePid - Key toggle to a specific process
  */
 int keyTogglePid(MMKeyCode code, const bool down, MMKeyFlags flags, uintptr pid) {
@@ -232,7 +307,7 @@ void toggleKey(char c, const bool down, MMKeyFlags flags, uintptr pid) {
 
 void unicodeType(const unsigned value, uintptr pid, int8_t isPid) {
 	if (pid != 0) {
-		HWND hwnd = getHwnd(pid, isPid);
+		HWND hwnd = focusedChildOf(getHwnd(pid, isPid));
 		if (value > 0xFFFF) {
 			uint32_t v = (uint32_t)value - 0x10000;
 			WCHAR hi = (WCHAR)(0xD800 + (v >> 10));
