@@ -32,6 +32,76 @@ type WindowTarget struct {
 // WindowTarget is zero.
 var ErrMouseWindowMissing = errors.New("mouse window target missing platform identifier")
 
+// ErrMouseNoWindowForPID is returned when MoveWithPID and friends cannot
+// resolve the supplied PID to a window on the current platform.
+var ErrMouseNoWindowForPID = errors.New("no window found for pid")
+
+// resolveTargetFromPID builds a WindowTarget for the per-platform mouse
+// dispatch given only a PID. On macOS the PID is the relevant identifier;
+// on Windows/Linux we need to find a window owned by that process so the
+// downstream C entry has something to deliver coords to.
+func resolveTargetFromPID(pid int) (WindowTarget, error) {
+	if pid <= 0 {
+		return WindowTarget{}, ErrMouseWindowMissing
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		return WindowTarget{PID: int32(pid)}, nil
+	case "windows":
+		hwnd := hwndByPIDPlatform(pid)
+		if hwnd == 0 {
+			return WindowTarget{}, ErrMouseNoWindowForPID
+		}
+		return WindowTarget{WindowID: hwnd, PID: int32(pid)}, nil
+	case "linux":
+		xid := xidByPIDPlatform(pid)
+		if xid == 0 {
+			return WindowTarget{}, ErrMouseNoWindowForPID
+		}
+		return WindowTarget{WindowID: xid, PID: int32(pid)}, nil
+	}
+	return WindowTarget{}, fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+}
+
+// MoveWithPID is the PID-targeted analogue of MoveWithWindow. It resolves
+// the PID to a window via per-platform best-effort lookup (top-level HWND
+// on Windows, _NET_WM_PID match on Linux X11, used as-is on macOS) and
+// then delegates to MoveWithWindow.
+func MoveWithPID(pid int, x, y int, settings MouseSettings) error {
+	t, err := resolveTargetFromPID(pid)
+	if err != nil {
+		return err
+	}
+	return MoveWithWindow(t, x, y, settings)
+}
+
+// ClickWithPID is the PID-targeted analogue of ClickWithWindow.
+func ClickWithPID(pid int, x, y int, button MouseButton, settings MouseSettings) error {
+	t, err := resolveTargetFromPID(pid)
+	if err != nil {
+		return err
+	}
+	return ClickWithWindow(t, x, y, button, settings)
+}
+
+// ToggleWithPID is the PID-targeted analogue of ToggleWithWindow.
+func ToggleWithPID(pid int, x, y int, button MouseButton, down bool, settings MouseSettings) error {
+	t, err := resolveTargetFromPID(pid)
+	if err != nil {
+		return err
+	}
+	return ToggleWithWindow(t, x, y, button, down, settings)
+}
+
+// ScrollWithPID is the PID-targeted analogue of ScrollWithWindow.
+func ScrollWithPID(pid int, x, y, dx, dy int, unit ScrollUnit, settings MouseSettings) error {
+	t, err := resolveTargetFromPID(pid)
+	if err != nil {
+		return err
+	}
+	return ScrollWithWindow(t, x, y, dx, dy, unit, settings)
+}
+
 // guardSession returns capture.ErrUnsupported when the running session
 // cannot service per-window mouse injection (Wayland on Linux today).
 func guardSession() error {

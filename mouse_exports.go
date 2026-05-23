@@ -130,7 +130,10 @@ func ScrollSmooth(delta ScrollDelta, settings MouseSettings) error {
 
 type MouseWindowTarget = m.WindowTarget
 
-var ErrMouseWindowMissing = m.ErrMouseWindowMissing
+var (
+	ErrMouseWindowMissing  = m.ErrMouseWindowMissing
+	ErrMouseNoWindowForPID = m.ErrMouseNoWindowForPID
+)
 
 func MoveWithWindow(t MouseWindowTarget, x, y int, settings MouseSettings) error {
 	return m.MoveWithWindow(t, x, y, settings)
@@ -146,4 +149,25 @@ func ToggleWithWindow(t MouseWindowTarget, x, y int, button MouseButton, down bo
 
 func ScrollWithWindow(t MouseWindowTarget, x, y, dx, dy int, unit ScrollUnit, settings MouseSettings) error {
 	return m.ScrollWithWindow(t, x, y, dx, dy, unit, settings)
+}
+
+// PID-targeted siblings of the *WithWindow APIs. Each resolves the PID to
+// a per-platform window identifier (first top-level HWND on Windows,
+// _NET_WM_PID match on Linux X11, used as-is on macOS) and then delegates.
+// Returns ErrMouseNoWindowForPID when the PID owns no addressable window.
+
+func MoveWithPID(pid, x, y int, settings MouseSettings) error {
+	return m.MoveWithPID(pid, x, y, settings)
+}
+
+func ClickWithPID(pid, x, y int, button MouseButton, settings MouseSettings) error {
+	return m.ClickWithPID(pid, x, y, button, settings)
+}
+
+func ToggleWithPID(pid, x, y int, button MouseButton, down bool, settings MouseSettings) error {
+	return m.ToggleWithPID(pid, x, y, button, down, settings)
+}
+
+func ScrollWithPID(pid, x, y, dx, dy int, unit ScrollUnit, settings MouseSettings) error {
+	return m.ScrollWithPID(pid, x, y, dx, dy, unit, settings)
 }
