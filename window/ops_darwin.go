@@ -10,6 +10,7 @@ package window
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <math.h>
 
 #define OPS_OK 0
 #define OPS_ERR_PERM 1
@@ -30,9 +31,17 @@ static int axTrusted(int prompt) {
 }
 
 // Find the AXUIElementRef matching the supplied CGWindowID by walking the
-// AX windows of the application identified by pid. We match on the
-// _AXUIElementWindowID private attribute first, then fall back to the
-// position/size pair from CGWindowList.
+// AX windows of the application identified by pid.
+//
+// Strategy:
+//   1. _AXUIElementWindowID is a private AXUIElement attribute on macOS
+//      that exposes the underlying CGWindowID. Where present, it is the
+//      authoritative match.
+//   2. If (1) is not exposed (older macOS, sandboxed apps), look up the
+//      CGWindowID's bounds via CGWindowListCreate*Info and pick the AX
+//      window whose position+size match within a 2 px tolerance.
+//
+// Either path returns a retained AXUIElementRef the caller releases.
 static AXUIElementRef axFindWindow(pid_t pid, uint32_t targetWindowID) {
 	if (pid <= 0) return NULL;
 	AXUIElementRef app = AXUIElementCreateApplication(pid);
@@ -46,10 +55,11 @@ static AXUIElementRef axFindWindow(pid_t pid, uint32_t targetWindowID) {
 	CFArrayRef windows = (CFArrayRef)windowsRef;
 	CFIndex count = CFArrayGetCount(windows);
 
-	// AXUIElement private attribute that exposes the underlying CGWindowID.
 	CFStringRef axWinIDAttr = CFStringCreateWithCString(NULL, "_AXUIElementWindowID", kCFStringEncodingUTF8);
 
 	AXUIElementRef hit = NULL;
+
+	// (1) _AXUIElementWindowID match.
 	for (CFIndex i = 0; i < count; i++) {
 		AXUIElementRef w = (AXUIElementRef)CFArrayGetValueAtIndex(windows, i);
 		CFTypeRef idRef = NULL;
@@ -60,6 +70,50 @@ static AXUIElementRef axFindWindow(pid_t pid, uint32_t targetWindowID) {
 			if (got == targetWindowID) {
 				hit = (AXUIElementRef)CFRetain(w);
 				break;
+			}
+		}
+	}
+
+	// (2) Position + size match via CGWindowList.
+	if (hit == NULL) {
+		CGRect target = CGRectNull;
+		CFArrayRef ids = CFArrayCreate(NULL, (const void*[]){
+			(const void*)CFNumberCreate(NULL, kCFNumberSInt32Type, &targetWindowID)
+		}, 1, &kCFTypeArrayCallBacks);
+		CFArrayRef cgwins = CGWindowListCreateDescriptionFromArray(ids);
+		if (ids) CFRelease(ids);
+		if (cgwins && CFArrayGetCount(cgwins) > 0) {
+			CFDictionaryRef d = (CFDictionaryRef)CFArrayGetValueAtIndex(cgwins, 0);
+			CFDictionaryRef boundsDict = (CFDictionaryRef)CFDictionaryGetValue(d, kCGWindowBounds);
+			if (boundsDict) {
+				CGRectMakeWithDictionaryRepresentation(boundsDict, &target);
+			}
+		}
+		if (cgwins) CFRelease(cgwins);
+
+		if (!CGRectIsNull(target) && target.size.width > 0 && target.size.height > 0) {
+			CGFloat tol = 2.0;
+			for (CFIndex i = 0; i < count; i++) {
+				AXUIElementRef w = (AXUIElementRef)CFArrayGetValueAtIndex(windows, i);
+				CFTypeRef posRef = NULL, sizeRef = NULL;
+				if (AXUIElementCopyAttributeValue(w, kAXPositionAttribute, &posRef) != kAXErrorSuccess) continue;
+				if (AXUIElementCopyAttributeValue(w, kAXSizeAttribute, &sizeRef) != kAXErrorSuccess) {
+					if (posRef) CFRelease(posRef);
+					continue;
+				}
+				CGPoint pt; CGSize sz;
+				if (AXValueGetValue((AXValueRef)posRef, kAXValueCGPointType, &pt) &&
+				    AXValueGetValue((AXValueRef)sizeRef, kAXValueCGSizeType, &sz)) {
+					if (fabs(pt.x - target.origin.x) <= tol &&
+					    fabs(pt.y - target.origin.y) <= tol &&
+					    fabs(sz.width - target.size.width) <= tol &&
+					    fabs(sz.height - target.size.height) <= tol) {
+						hit = (AXUIElementRef)CFRetain(w);
+						CFRelease(posRef); CFRelease(sizeRef);
+						break;
+					}
+				}
+				CFRelease(posRef); CFRelease(sizeRef);
 			}
 		}
 	}
