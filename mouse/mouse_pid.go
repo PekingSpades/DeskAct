@@ -124,12 +124,9 @@ func ScrollWithWindow(t WindowTarget, x, y, dx, dy int, unit ScrollUnit, setting
 		cUnit = C.MMScrollUnit(C.MM_SCROLL_UNIT_PIXEL)
 	}
 	cx, cy := translateForCall(t, x, y)
-	// On macOS the scroll wheel event is posted to whichever window the
-	// system cursor is over within the target pid. Warp the system cursor
-	// to (cx, cy) first so the scroll lands on the intended client area.
-	if runtime.GOOS == "darwin" && t.WindowID != 0 {
-		warpSystemCursor(cx, cy)
-	}
+	// On macOS the scroll wheel event carries a logical location set via
+	// CGEventSetLocation (in mouse_c_macos_pid.h). The real system cursor is
+	// NOT moved — non-preemption holds.
 	rc := C.mouseScrollPidGo(toCID(t), C.int(cx), C.int(cy), C.int(dx), C.int(dy), cUnit)
 	MilliSleep(settings.Sleep)
 	if int(rc) != 0 {

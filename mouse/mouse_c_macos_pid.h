@@ -65,12 +65,11 @@ static int mouseClickPidGo(uintptr_t pid, int screenX, int screenY, MMMouseButto
 }
 
 /* macOS scroll wheel events accept line-unit values; pixel-unit is emulated
- * by CGEventCreateScrollWheelEvent2 with kCGScrollEventUnitPixel. x and y
- * arguments are ignored — the wheel event is posted to whichever window the
- * targeted process currently owns under the system cursor. */
-static int mouseScrollPidGo(uintptr_t pid, int x, int y, int dx, int dy, MMScrollUnit unit) {
-	(void)x;
-	(void)y;
+ * by CGEventCreateScrollWheelEvent2 with kCGScrollEventUnitPixel. We bind
+ * the scroll event's logical location to (screenX, screenY) via
+ * CGEventSetLocation so it lands on the target window's client area
+ * without warping the real system cursor. */
+static int mouseScrollPidGo(uintptr_t pid, int screenX, int screenY, int dx, int dy, MMScrollUnit unit) {
 	if (pid == 0) {
 		return MM_MOUSE_PID_ERR_WINDOW;
 	}
@@ -81,6 +80,8 @@ static int mouseScrollPidGo(uintptr_t pid, int x, int y, int dx, int dy, MMScrol
 	if (ev == NULL) {
 		return MM_MOUSE_PID_ERR_EVENT;
 	}
+	CGPoint pt = CGPointMake((CGFloat)screenX, (CGFloat)screenY);
+	CGEventSetLocation(ev, pt);
 	CGEventPostToPid((pid_t)pid, ev);
 	CFRelease(ev);
 	return MM_MOUSE_PID_OK;
