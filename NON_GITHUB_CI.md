@@ -171,9 +171,8 @@ bash scripts/non-github-ci/verify/run-windows-vm-selftest.sh
 bash scripts/non-github-ci/verify/run-macos-vm-selftest.sh
 ```
 
-The Windows WGC C++ wrapper (`screenshot/windows_wgc.cpp`) currently
-returns a runtime-unavailable status; capture transparently falls back
-to `PrintWindow(PW_RENDERFULLCONTENT)`. The `bootstrap-windows.ps1`
-worker installs the mingw-w64 headers/crt/winpthreads packages needed
-for the eventual C-ABI WGC rewrite and runs a header sanity check.
-
+The Windows screenshot path defaults to WGC (Windows.Graphics.Capture)
+with `PrintWindow(PW_RENDERFULLCONTENT)` as a runtime fallback for
+hosts where WGC fails on a specific HWND. `bootstrap-windows.ps1`
+installs the mingw-w64 headers/CRT/winpthreads packages and runs a
+WinRT-header sanity check; the bootstrap aborts if WGC cannot build.
