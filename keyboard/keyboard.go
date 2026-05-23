@@ -17,6 +17,8 @@ import (
 	"syscall"
 	"unicode"
 	"unsafe"
+
+	cap "github.com/PekingSpades/DeskAct/capture"
 )
 
 const keyErrMessage = "Invalid key flag specified."
@@ -315,6 +317,9 @@ func KeyTap(key string, modifiers []Modifier, settings KeyboardSettings) error {
 
 // KeyTapWithPID taps the keyboard code on a specific process.
 func KeyTapWithPID(key string, pid int, modifiers []Modifier, settings KeyboardSettings) error {
+	if runtime.GOOS == "linux" && isWaylandSession() {
+		return fmt.Errorf("%w: wayland session — per-window keyboard injection requires X11", cap.ErrUnsupported)
+	}
 	key, modifiers = normalizeKeyAndModifiers(key, modifiers)
 
 	keyCode, err := checkKeyCodes(key)
@@ -351,6 +356,9 @@ func KeyToggle(key string, down bool, modifiers []Modifier, settings KeyboardSet
 
 // KeyToggleWithPID toggles a key on a specific process.
 func KeyToggleWithPID(key string, down bool, pid int, modifiers []Modifier, settings KeyboardSettings) error {
+	if runtime.GOOS == "linux" && isWaylandSession() {
+		return fmt.Errorf("%w: wayland session — per-window keyboard injection requires X11", cap.ErrUnsupported)
+	}
 	key, modifiers = normalizeKeyAndModifiers(key, modifiers)
 
 	keyCode, err := checkKeyCodes(key)
@@ -365,6 +373,67 @@ func KeyToggleWithPID(key string, down bool, pid int, modifiers []Modifier, sett
 
 	milliSleep(settings.Sleep)
 	return keyActionError("keyTogglePid", key, pid, ret)
+}
+
+// KeyTapWithWindow taps a key targeting a specific window without disturbing
+// the user's keyboard focus. It is the cross-platform-correct counterpart to
+// KeyTapWithPID: callers always supply both windowID (HWND on Windows, X11
+// XID on Linux) and pid (used by macOS CGEventPostToPid), and the right one
+// is dispatched per platform.
+//
+//   - Windows: uses PostMessageW(WM_KEYDOWN/UP) against windowID (HWND).
+//   - macOS:   uses CGEventPostToPid(pid, ev).
+//   - Linux X11: uses XSendEvent against windowID (XID). When windowID is
+//                zero and pid is non-zero, attempts a best-effort PID->XID
+//                lookup via _NET_WM_PID on every visible window.
+func KeyTapWithWindow(key string, windowID uint64, pid int, modifiers []Modifier, settings KeyboardSettings) error {
+	if runtime.GOOS == "linux" && isWaylandSession() {
+		return fmt.Errorf("%w: wayland session — per-window keyboard injection requires X11", cap.ErrUnsupported)
+	}
+	id, err := keyboardWindowTarget(windowID, pid)
+	if err != nil {
+		return err
+	}
+	return KeyTapWithPID(key, id, modifiers, settings)
+}
+
+// KeyToggleWithWindow is the per-window analogue of KeyToggleWithPID. See
+// KeyTapWithWindow for the platform-specific dispatch behavior.
+func KeyToggleWithWindow(key string, down bool, windowID uint64, pid int, modifiers []Modifier, settings KeyboardSettings) error {
+	if runtime.GOOS == "linux" && isWaylandSession() {
+		return fmt.Errorf("%w: wayland session — per-window keyboard injection requires X11", cap.ErrUnsupported)
+	}
+	id, err := keyboardWindowTarget(windowID, pid)
+	if err != nil {
+		return err
+	}
+	return KeyToggleWithPID(key, down, id, modifiers, settings)
+}
+
+// keyboardWindowTarget reduces (windowID, pid) to the single int the
+// platform's C entry point expects — HWND on Windows, XID on Linux, PID on
+// macOS. Returns ErrKeyWindowNotFound when neither identifier is usable.
+func keyboardWindowTarget(windowID uint64, pid int) (int, error) {
+	switch runtime.GOOS {
+	case "darwin":
+		if pid != 0 {
+			return pid, nil
+		}
+	case "windows":
+		if windowID != 0 {
+			return int(windowID), nil
+		}
+	case "linux":
+		if windowID != 0 {
+			return int(windowID), nil
+		}
+		if pid != 0 {
+			if xid := lookupXIDByPID(pid); xid != 0 {
+				return int(xid), nil
+			}
+		}
+	}
+	return 0, ErrKeyWindowNotFound
 }
 
 // KeyPress press and release a key with random delay (more human-like).

@@ -19,13 +19,18 @@ var errWaylandSession = fmt.Errorf("%w: wayland session detected", errUnsupporte
 
 func isWaylandSession() bool {
 	if os.Getenv("WAYLAND_DISPLAY") != "" {
-		return os.Getenv("DISPLAY") == ""
+		return true
 	}
 	if t := os.Getenv("XDG_SESSION_TYPE"); t == "wayland" {
 		return true
 	}
 	return false
 }
+
+// IsWaylandSession is the package-private check re-exported for the other
+// platform-gated packages (mouse, keyboard, screenshot) that also need to
+// short-circuit on Wayland.
+func IsWaylandSession() bool { return isWaylandSession() }
 
 type xConnState struct {
 	conn    *xgb.Conn

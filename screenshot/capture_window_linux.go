@@ -134,12 +134,23 @@ import "C"
 import (
 	"fmt"
 	"image"
+	"os"
 	"unsafe"
 
 	cap "github.com/PekingSpades/DeskAct/capture"
 )
 
+func isWaylandSession() bool {
+	if os.Getenv("WAYLAND_DISPLAY") != "" {
+		return true
+	}
+	return os.Getenv("XDG_SESSION_TYPE") == "wayland"
+}
+
 func captureWindowPlatform(req cap.WindowRequest) (*image.RGBA, error) {
+	if isWaylandSession() {
+		return nil, fmt.Errorf("%w: wayland session — per-window screenshot requires X11", cap.ErrUnsupported)
+	}
 	backend := req.Options.Backend
 	if backend == cap.CaptureBackendDefault {
 		backend = cap.CaptureBackendXComposite

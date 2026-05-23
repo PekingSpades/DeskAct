@@ -137,8 +137,7 @@ function Verify-WinRTHeaders {
         $gxx = Get-Command x86_64-w64-mingw32-g++ -ErrorAction SilentlyContinue
     }
     if (-not $gxx) {
-        Write-Step 'g++ not found; skipping WinRT header sanity check'
-        return
+        throw "g++ not found after MinGW install; cannot verify WinRT headers (required for the screenshot WGC backend)."
     }
     Write-Step 'verifying WinRT/WGC headers compile (windows.graphics.capture.interop.h)'
     $sentinel = Join-Path $Script:CacheDir 'wgc-header-check.cpp'
@@ -149,12 +148,13 @@ function Verify-WinRTHeaders {
 int main(){return 0;}
 '@ | Out-File -FilePath $sentinel -Encoding ASCII
     $obj = Join-Path $Script:CacheDir 'wgc-header-check.o'
-    & $gxx.Source -std=c++17 -c $sentinel -o $obj 2>&1 | Out-Null
+    $log = Join-Path $Script:CacheDir 'wgc-header-check.log'
+    & $gxx.Source -std=c++17 -c $sentinel -o $obj 2>&1 | Tee-Object -FilePath $log | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        Write-Step 'WARNING: WinRT/WGC headers are not usable on this worker; the screenshot WGC path will be a runtime stub and PrintWindow will be used.'
-    } else {
-        Write-Step 'WinRT/WGC headers OK'
+        Write-Step "WinRT/WGC header check failed; compile log:`n$(Get-Content $log -Raw)"
+        throw "WinRT/WGC headers (windows.graphics.capture.interop.h) did not compile. The Windows worker is missing required MinGW packages — refusing to proceed because the plan requires WGC to build."
     }
+    Write-Step 'WinRT/WGC headers OK'
 }
 
 $Script:CacheDir = Join-Path $env:TEMP 'deskact-build-tools'

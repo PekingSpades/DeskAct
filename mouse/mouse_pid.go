@@ -7,7 +7,10 @@ import "C"
 
 import (
 	"errors"
+	"fmt"
 	"runtime"
+
+	cap "github.com/PekingSpades/DeskAct/capture"
 )
 
 // WindowTarget identifies a window for non-preemptive mouse injection.
@@ -29,15 +32,28 @@ type WindowTarget struct {
 // WindowTarget is zero.
 var ErrMouseWindowMissing = errors.New("mouse window target missing platform identifier")
 
+// guardSession returns capture.ErrUnsupported when the running session
+// cannot service per-window mouse injection (Wayland on Linux today).
+func guardSession() error {
+	if runtime.GOOS == "linux" && isWaylandSession() {
+		return fmt.Errorf("%w: wayland session — per-window mouse injection requires X11", cap.ErrUnsupported)
+	}
+	return nil
+}
+
 // MoveWithWindow posts a mouse-move event to a specific window without
 // touching the user's real cursor or focus. (x, y) are window-client
 // coordinates on Windows and X11; on macOS they are screen coordinates
 // (callers translate client to screen using window.Bounds before calling).
 func MoveWithWindow(t WindowTarget, x, y int, settings MouseSettings) error {
+	if err := guardSession(); err != nil {
+		return err
+	}
 	if !targetReady(t) {
 		return wrapMouseError(MouseOpMove, ErrMouseWindowMissing, 0, 0, 0, "", 0)
 	}
-	rc := C.mouseMovePidGo(toCID(t), C.int(x), C.int(y))
+	cx, cy := translateForCall(t, x, y)
+	rc := C.mouseMovePidGo(toCID(t), C.int(cx), C.int(cy))
 	MilliSleep(settings.Sleep)
 	if int(rc) != 0 {
 		return wrapMouseError(MouseOpMove, ErrMouseActionFailed, 0, 0, 0, pidErrorDetail(int(rc)), int(rc))
@@ -48,6 +64,9 @@ func MoveWithWindow(t WindowTarget, x, y int, settings MouseSettings) error {
 // ClickWithWindow synthesizes a single press+release of the supplied button
 // on the target window.
 func ClickWithWindow(t WindowTarget, x, y int, button MouseButton, settings MouseSettings) error {
+	if err := guardSession(); err != nil {
+		return err
+	}
 	if !targetReady(t) {
 		return wrapMouseError(MouseOpClick, ErrMouseWindowMissing, button, 0, 1, "", 0)
 	}
@@ -55,7 +74,8 @@ func ClickWithWindow(t WindowTarget, x, y int, button MouseButton, settings Mous
 	if err != nil {
 		return wrapMouseError(MouseOpClick, err, button, 0, 1, "", 0)
 	}
-	rc := C.mouseClickPidGo(toCID(t), C.int(x), C.int(y), cButton)
+	cx, cy := translateForCall(t, x, y)
+	rc := C.mouseClickPidGo(toCID(t), C.int(cx), C.int(cy), cButton)
 	MilliSleep(settings.Sleep)
 	if int(rc) != 0 {
 		return wrapMouseError(MouseOpClick, ErrMouseActionFailed, button, 0, 1, pidErrorDetail(int(rc)), int(rc))
@@ -66,6 +86,9 @@ func ClickWithWindow(t WindowTarget, x, y int, button MouseButton, settings Mous
 // ToggleWithWindow presses (down=true) or releases (down=false) the button
 // on the target window without affecting the user's real input devices.
 func ToggleWithWindow(t WindowTarget, x, y int, button MouseButton, down bool, settings MouseSettings) error {
+	if err := guardSession(); err != nil {
+		return err
+	}
 	if !targetReady(t) {
 		return wrapMouseError(MouseOpToggle, ErrMouseWindowMissing, button, 0, 0, "", 0)
 	}
@@ -77,7 +100,8 @@ func ToggleWithWindow(t WindowTarget, x, y int, button MouseButton, down bool, s
 	if down {
 		downC = 1
 	}
-	rc := C.mouseTogglePidGo(toCID(t), C.int(x), C.int(y), cButton, downC)
+	cx, cy := translateForCall(t, x, y)
+	rc := C.mouseTogglePidGo(toCID(t), C.int(cx), C.int(cy), cButton, downC)
 	MilliSleep(settings.Sleep)
 	if int(rc) != 0 {
 		return wrapMouseError(MouseOpToggle, ErrMouseActionFailed, button, 0, 0, pidErrorDetail(int(rc)), int(rc))
@@ -89,6 +113,9 @@ func ToggleWithWindow(t WindowTarget, x, y int, button MouseButton, down bool, s
 // right; dy>0 scrolls up. The unit is interpreted per-platform; X11 always
 // treats values as line ticks regardless of unit.
 func ScrollWithWindow(t WindowTarget, x, y, dx, dy int, unit ScrollUnit, settings MouseSettings) error {
+	if err := guardSession(); err != nil {
+		return err
+	}
 	if !targetReady(t) {
 		return wrapMouseError(MouseOpScroll, ErrMouseWindowMissing, 0, unit, 0, "", 0)
 	}
@@ -96,12 +123,33 @@ func ScrollWithWindow(t WindowTarget, x, y, dx, dy int, unit ScrollUnit, setting
 	if unit == ScrollUnitPixel {
 		cUnit = C.MMScrollUnit(C.MM_SCROLL_UNIT_PIXEL)
 	}
-	rc := C.mouseScrollPidGo(toCID(t), C.int(x), C.int(y), C.int(dx), C.int(dy), cUnit)
+	cx, cy := translateForCall(t, x, y)
+	// On macOS the scroll wheel event is posted to whichever window the
+	// system cursor is over within the target pid. Warp the system cursor
+	// to (cx, cy) first so the scroll lands on the intended client area.
+	if runtime.GOOS == "darwin" && t.WindowID != 0 {
+		warpSystemCursor(cx, cy)
+	}
+	rc := C.mouseScrollPidGo(toCID(t), C.int(cx), C.int(cy), C.int(dx), C.int(dy), cUnit)
 	MilliSleep(settings.Sleep)
 	if int(rc) != 0 {
 		return wrapMouseError(MouseOpScroll, ErrMouseActionFailed, 0, unit, 0, pidErrorDetail(int(rc)), int(rc))
 	}
 	return nil
+}
+
+// translateForCall returns the (x, y) that the platform's C entry point
+// expects. On macOS the C side wants global screen coordinates, so we map
+// the supplied window-client coords through the target window's bounds.
+// On Windows/X11 the C side wants client coords; we pass through.
+func translateForCall(t WindowTarget, clientX, clientY int) (int, int) {
+	if runtime.GOOS != "darwin" {
+		return clientX, clientY
+	}
+	if sx, sy, ok := translateClientToScreen(t.WindowID, clientX, clientY); ok {
+		return sx, sy
+	}
+	return clientX, clientY
 }
 
 func targetReady(t WindowTarget) bool {
