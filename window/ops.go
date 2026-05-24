@@ -19,9 +19,13 @@ func FromInfo(w WindowInfo) Target {
 	return Target{ID: w.ID, PID: int32(w.PID)}
 }
 
-// Move sets the top-left position of a window in virtual desktop pixels.
+// Move sets the top-left position of a window's normal/restored bounds in
+// virtual desktop pixels.
 // id is platform-specific (HWND on Windows, CGWindowID on macOS, X11 Window
 // XID on Linux). pid is required on macOS and ignored on the others.
+// On Windows, minimized or maximized windows are not restored or activated;
+// their restored bounds are updated via WINDOWPLACEMENT and take effect when
+// the window is later restored.
 //
 // Move accepts the full (id, pid, x, y) signature rather than the plan's
 // (id, x, y) so the macOS AX path has both identifiers. Callers that
@@ -36,7 +40,9 @@ func MoveTarget(t Target, x, y int) error {
 	return Move(t.ID, t.PID, x, y)
 }
 
-// Resize sets a window's outer width and height in virtual desktop pixels.
+// Resize sets a window's normal/restored outer width and height in virtual
+// desktop pixels. On Windows, minimized or maximized windows keep their
+// current show state and only their restored bounds are updated.
 func Resize(id uint64, pid int32, w, h int) error {
 	return resizeWindow(id, pid, w, h)
 }
@@ -46,9 +52,10 @@ func ResizeTarget(t Target, w, h int) error {
 	return Resize(t.ID, t.PID, w, h)
 }
 
-// MoveResize sets both position and size in one operation when supported by
-// the platform (Windows SetWindowPos, X11 _NET_MOVERESIZE_WINDOW). Falls
-// back to Move + Resize on macOS where the AX API exposes them separately.
+// MoveResize sets both normal/restored position and size in one operation
+// when supported by the platform (Windows SetWindowPos or WINDOWPLACEMENT,
+// X11 _NET_MOVERESIZE_WINDOW). Falls back to Move + Resize on macOS where
+// the AX API exposes them separately.
 func MoveResize(id uint64, pid int32, x, y, w, h int) error {
 	return moveResizeWindow(id, pid, x, y, w, h)
 }
@@ -101,8 +108,10 @@ func Close(id uint64, pid int32) error {
 // CloseTarget is the WindowTarget form of Close.
 func CloseTarget(t Target) error { return Close(t.ID, t.PID) }
 
-// Bounds returns the current outer bounds of the window in virtual desktop
-// pixels. Returns capture.ErrWindowNotFound if the window cannot be located.
+// Bounds returns the window's outer bounds in virtual desktop pixels. On
+// Windows, minimized or maximized windows report their restored bounds rather
+// than the taskbar/minimized representation or current maximized rectangle.
+// Returns capture.ErrWindowNotFound if the window cannot be located.
 func Bounds(id uint64, pid int32) (display.Rect, error) {
 	return boundsWindow(id, pid)
 }
