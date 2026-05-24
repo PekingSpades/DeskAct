@@ -136,6 +136,22 @@ func (s *state) mouseTarget(w deskact.WindowInfo) deskact.MouseWindowTarget {
 	return deskact.MouseWindowTarget{WindowID: w.ID, PID: int32(w.PID)}
 }
 
+func (s *state) refreshSelectedBounds(w deskact.WindowInfo) (deskact.WindowInfo, error) {
+	bounds, err := deskact.WindowBounds(w.ID, int32(w.PID))
+	if err != nil {
+		return w, err
+	}
+	w.Bounds = bounds
+	if s.selected >= 0 && s.selected < len(s.windows) && s.windows[s.selected].ID == w.ID {
+		s.windows[s.selected] = w
+	}
+	return w, nil
+}
+
+func printBounds(label string, w deskact.WindowInfo) {
+	fmt.Printf("%s=(%dx%d at %d,%d)", label, w.Bounds.W, w.Bounds.H, w.Bounds.X, w.Bounds.Y)
+}
+
 func (s *state) delayBeforeOp() time.Duration {
 	fmt.Print("Delay before operation (seconds, default 0): ")
 	line := readLine(s.reader)
@@ -231,7 +247,19 @@ func (s *state) cmdMove() {
 	s.delayBeforeOp()
 	start := time.Now()
 	err := deskact.WindowMove(w.ID, int32(w.PID), x, y)
-	fmt.Printf("op=move win=%d at=(%d,%d) elapsed=%s err=%v\n", w.ID, x, y, time.Since(start), err)
+	elapsed := time.Since(start)
+	if err != nil {
+		fmt.Printf("op=move win=%d requested=(%d,%d) elapsed=%s ok=false err=%v\n", w.ID, x, y, elapsed, err)
+		return
+	}
+	actual, boundsErr := s.refreshSelectedBounds(w)
+	fmt.Printf("op=move win=%d requested=(%d,%d) elapsed=%s ok=true ", w.ID, x, y, elapsed)
+	if boundsErr != nil {
+		fmt.Printf("bounds_err=%v\n", boundsErr)
+		return
+	}
+	printBounds("actual", actual)
+	fmt.Println()
 }
 
 func (s *state) cmdResize() {
@@ -244,7 +272,19 @@ func (s *state) cmdResize() {
 	s.delayBeforeOp()
 	start := time.Now()
 	err := deskact.WindowResize(w.ID, int32(w.PID), cw, ch)
-	fmt.Printf("op=resize win=%d size=(%dx%d) elapsed=%s err=%v\n", w.ID, cw, ch, time.Since(start), err)
+	elapsed := time.Since(start)
+	if err != nil {
+		fmt.Printf("op=resize win=%d requested=(%dx%d) elapsed=%s ok=false err=%v\n", w.ID, cw, ch, elapsed, err)
+		return
+	}
+	actual, boundsErr := s.refreshSelectedBounds(w)
+	fmt.Printf("op=resize win=%d requested=(%dx%d) elapsed=%s ok=true ", w.ID, cw, ch, elapsed)
+	if boundsErr != nil {
+		fmt.Printf("bounds_err=%v\n", boundsErr)
+		return
+	}
+	printBounds("actual", actual)
+	fmt.Println()
 }
 
 func (s *state) cmdLifecycle() {
@@ -271,7 +311,18 @@ func (s *state) cmdLifecycle() {
 		fmt.Printf("unknown sub-op %q\n", c)
 		return
 	}
-	fmt.Printf("op=%s win=%d err=%v\n", op, w.ID, err)
+	if err != nil {
+		fmt.Printf("op=%s win=%d ok=false err=%v\n", op, w.ID, err)
+		return
+	}
+	actual, boundsErr := s.refreshSelectedBounds(w)
+	fmt.Printf("op=%s win=%d ok=true ", op, w.ID)
+	if boundsErr != nil {
+		fmt.Printf("bounds_err=%v\n", boundsErr)
+		return
+	}
+	printBounds("actual", actual)
+	fmt.Println()
 }
 
 func (s *state) cmdClose() {
